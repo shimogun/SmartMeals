@@ -1,75 +1,181 @@
-import { useState, useRef } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, PanResponder, Animated } from 'react-native';
+import { useState, useRef, useEffect } from 'react';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, PanResponder, Dimensions } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+type User = {
+  id: string;
+  name: string;
+  age: number;
+  avatar: string;
+  createdAt: number;
+};
+
+type GlucoseRecord = {
+  id: string;
+  value: number;
+  timestamp: number;
+  date: string;
+  mealType: string;
+  mealNote: string;
+};
+
+const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const [glucose, setGlucose] = useState(100);
-  
- // 指の動きの「起点」を記録するための変数
- const lastUpdateX = useRef(0);
+  const [users, setUsers] = useState<User[]>([]);
+  const [currentUserIndex, setCurrentUserIndex] = useState(0);
+  const [records, setRecords] = useState<GlucoseRecord[]>([]);
+  const [showAddUser, setShowAddUser] = useState(false);
 
+  // スワイプ用の参照
+  const lastSwipeX = useRef(0);
+
+ // データの読み込み
+ useEffect(() => {
+   loadData();
+ }, []);
+
+ const loadData = async () => {
+   try {
+     // ユーザーデータ読み込み
+     const storedUsers = await AsyncStorage.getItem('users');
+     if (storedUsers) {
+       setUsers(JSON.parse(storedUsers));
+     } else {
+       // 初回起動時のサンプルユーザー
+       const defaultUser: User = {
+         id: Date.now().toString(),
+         name: 'あなた',
+         age: 30,
+         avatar: '👤',
+         createdAt: Date.now()
+       };
+       setUsers([defaultUser]);
+       await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
+     }
+
+     // 血糖値データ読み込み
+     const stored = await AsyncStorage.getItem('glucose_records');
+     if (stored) {
+       setRecords(JSON.parse(stored));
+     }
+   } catch (error) {
+     console.error('データ読み込みエラー:', error);
+   }
+ };
+
+ // 今日の最新血糖値を取得
+ const getTodayLatestGlucose = () => {
+   const today = new Date().toISOString().split('T')[0];
+   const todayRecords = records.filter(record => record.date === today);
+   return todayRecords.length > 0 ? todayRecords[todayRecords.length - 1] : null;
+ };
+
+ // ユーザー切り替え
+ const switchUser = (direction: number) => {
+   if (users.length <= 1) return; // 1人以下の場合は切り替えしない
+   
+   setCurrentUserIndex(prev => {
+     const newIndex = prev + direction;
+     if (newIndex < 0) return users.length - 1;
+     if (newIndex >= users.length) return 0;
+     return newIndex;
+   });
+ };
+
+ // スワイプジェスチャーでユーザー切り替え
  const panResponder = useRef(
    PanResponder.create({
      onStartShouldSetPanResponder: () => true,
      onPanResponderGrant: () => {
-       // 指が触れた瞬間に、基準点をリセット
-       lastUpdateX.current = 0;
+       lastSwipeX.current = 0;
      },
      onPanResponderMove: (evt, gestureState) => {
-       // ★ ここで「感度」を定義（30ピクセル動くごとに1変化）
-       const threshold = 1; 
-       
-       // 前回数字を変えた場所から、どれくらい動いたか
-       const distance = gestureState.dx - lastUpdateX.current;
+       const threshold = 100; // スワイプの閾値
+       const distance = gestureState.dx - lastSwipeX.current;
 
        if (Math.abs(distance) >= threshold) {
-         // 右に動けば+1、左に動けば-1
-         const direction = distance > 0 ? 1 : -1;
-         
-         setGlucose(prev => {
-           const next = prev + direction;
-           return Math.max(50, Math.min(400, next));
-         });
-
-         // ★ 重要：数字を変えたので、今の場所を新しい基準点にする
-         lastUpdateX.current = gestureState.dx;
+         const direction = distance > 0 ? -1 : 1; // 右スワイプで前のユーザー
+         switchUser(direction);
+         lastSwipeX.current = gestureState.dx;
        }
      },
      onPanResponderRelease: () => {
-       lastUpdateX.current = 0;
+       lastSwipeX.current = 0;
      },
    })
  ).current;
 
+  const currentUser = users.length > 0 ? users[currentUserIndex] : null;
+  const todayGlucose = getTodayLatestGlucose();
+
+  if (!currentUser) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={{ color: '#fff', textAlign: 'center', marginTop: 100 }}>Loading...</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
-      <Text style={styles.title}>今日の血糖値を記録</Text>
-      
-      <View style={styles.inputCard}>
-        <Text style={styles.label}>空腹時血糖値</Text>
-        <View style={styles.valueContainer}>
-          <Text style={styles.valueText}>{glucose}</Text>
-          <Text style={styles.unitText}>mg/dL</Text>
+      {/* スワイプエリア */}
+      <View style={styles.swipeContainer} {...panResponder.panHandlers}>
+        
+        {/* メインプロフィールカード */}
+        <View style={styles.profileCard}>
+          
+          {/* アバター */}
+          <View style={styles.avatarContainer}>
+            <Text style={styles.avatarEmoji}>{currentUser.avatar}</Text>
+          </View>
+          
+          {/* ユーザー名 */}
+          <Text style={styles.userName}>{currentUser.name}</Text>
+          <Text style={styles.userAge}>{currentUser.age}歳</Text>
+          
+          {/* 今日の血糖値 */}
+          <View style={styles.todaySection}>
+            <Text style={styles.todayLabel}>今日の最新</Text>
+            {todayGlucose ? (
+              <>
+                <Text style={styles.todayValue}>{todayGlucose.value}</Text>
+                <Text style={styles.todayUnit}>mg/dL</Text>
+                <Text style={styles.todayTime}>
+                  {new Date(todayGlucose.timestamp).toLocaleTimeString('ja-JP', { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                </Text>
+              </>
+            ) : (
+              <Text style={styles.noDataText}>記録なし</Text>
+            )}
+          </View>
         </View>
 
-        <View style={styles.controls}>
-          {/* マイナスボタン */}
-          <TouchableOpacity style={styles.button} onPress={() => setGlucose(p => p - 1)}>
-            <Text style={styles.buttonText}>-</Text>
-          </TouchableOpacity>
-
-          {/* ★ここがフリックエリアになります★ */}
-          <View 
-            style={styles.flickArea} 
-            {...panResponder.panHandlers}
-          >
-             <View style={styles.flickTrack}>
-                <Text style={styles.hintText}>◀  スライドで調整  ▶</Text>
-             </View>
+        {/* ユーザー切り替えヒント */}
+        {users.length > 1 && (
+          <View style={styles.swipeHint}>
+            <Text style={styles.swipeHintText}>◀ スワイプでユーザー切り替え ▶</Text>
+            <Text style={styles.userCounter}>{currentUserIndex + 1} / {users.length}</Text>
           </View>
+        )}
 
-          {/* プラスボタン */}
-          <TouchableOpacity style={styles.button} onPress={() => setGlucose(p => p + 1)}>
-            <Text style={styles.buttonText}>+</Text>
+        {/* アクションボタン */}
+        <View style={styles.actionButtons}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => console.log('プロフィール編集')}
+          >
+            <Text style={styles.actionButtonText}>プロフィール編集</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.addButton]}
+            onPress={() => console.log('家族追加')}
+          >
+            <Text style={styles.addButtonText}>+ 家族を追加</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -78,18 +184,122 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 20, backgroundColor: '#fff' },
-  title: { fontSize: 20, fontWeight: 'bold', marginTop: 40 },
-  label: { fontSize: 16, color: '#333' },
-  inputCard: { backgroundColor: '#f8f9fa', borderRadius: 20, padding: 25, marginTop: 20, alignItems: 'center', borderWidth: 1, borderColor: '#eee' },
-  valueContainer: { flexDirection: 'row', alignItems: 'baseline', marginVertical: 20 },
-  valueText: { fontSize: 56, fontWeight: 'bold', color: '#007AFF' },
-  unitText: { fontSize: 20, marginLeft: 8, color: '#666' },
-  controls: { flexDirection: 'row', alignItems: 'center', width: '100%' },
-  button: { width: 50, height: 50, borderRadius: 25, backgroundColor: '#fff', justifyContent: 'center', alignItems: 'center', elevation: 4 },
-  buttonText: { fontSize: 24, fontWeight: 'bold', color: '#007AFF' },
-  // フリックエリアのスタイル
-  flickArea: { flex: 1, height: 60, marginHorizontal: 10, justifyContent: 'center' },
-  flickTrack: { backgroundColor: '#e9ecef', height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  hintText: { color: '#666', fontSize: 12, fontWeight: 'bold' }
+  container: {
+    flex: 1,
+    backgroundColor: '#000',
+    paddingHorizontal: 20,
+  },
+  swipeContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileCard: {
+    width: width * 0.85,
+    backgroundColor: '#fff',
+    borderRadius: 30,
+    padding: 40,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.3,
+    shadowRadius: 20,
+    elevation: 15,
+  },
+  avatarContainer: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#f0f0f0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  avatarEmoji: {
+    fontSize: 60,
+  },
+  userName: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: '#333',
+    marginBottom: 5,
+  },
+  userAge: {
+    fontSize: 18,
+    color: '#666',
+    marginBottom: 30,
+  },
+  todaySection: {
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 20,
+    padding: 25,
+    width: '100%',
+  },
+  todayLabel: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  todayValue: {
+    fontSize: 36,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  todayUnit: {
+    fontSize: 16,
+    color: '#666',
+    marginBottom: 5,
+  },
+  todayTime: {
+    fontSize: 14,
+    color: '#999',
+  },
+  noDataText: {
+    fontSize: 18,
+    color: '#ccc',
+    fontStyle: 'italic',
+  },
+  swipeHint: {
+    alignItems: 'center',
+    marginTop: 30,
+  },
+  swipeHintText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 5,
+  },
+  userCounter: {
+    fontSize: 14,
+    color: '#007AFF',
+    fontWeight: 'bold',
+  },
+  actionButtons: {
+    marginTop: 40,
+    width: width * 0.85,
+  },
+  actionButton: {
+    backgroundColor: '#fff',
+    borderRadius: 25,
+    paddingVertical: 15,
+    marginBottom: 15,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  actionButtonText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '600',
+  },
+  addButton: {
+    backgroundColor: '#007AFF',
+  },
+  addButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
 });

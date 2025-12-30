@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, PanResponder, Dimensions } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Dimensions, Modal, TextInput, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 type User = {
@@ -10,25 +10,18 @@ type User = {
   createdAt: number;
 };
 
-type GlucoseRecord = {
-  id: string;
-  value: number;
-  timestamp: number;
-  date: string;
-  mealType: string;
-  mealNote: string;
-};
 
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUserIndex, setCurrentUserIndex] = useState(0);
-  const [records, setRecords] = useState<GlucoseRecord[]>([]);
   const [showAddUser, setShowAddUser] = useState(false);
-
-  // スワイプ用の参照
-  const lastSwipeX = useRef(0);
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editAge, setEditAge] = useState('');
+  const [newName, setNewName] = useState('');
+  const [newAge, setNewAge] = useState('');
 
  // データの読み込み
  useEffect(() => {
@@ -53,27 +46,14 @@ export default function HomeScreen() {
        setUsers([defaultUser]);
        await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
      }
-
-     // 血糖値データ読み込み
-     const stored = await AsyncStorage.getItem('glucose_records');
-     if (stored) {
-       setRecords(JSON.parse(stored));
-     }
    } catch (error) {
      console.error('データ読み込みエラー:', error);
    }
  };
 
- // 今日の最新血糖値を取得
- const getTodayLatestGlucose = () => {
-   const today = new Date().toISOString().split('T')[0];
-   const todayRecords = records.filter(record => record.date === today);
-   return todayRecords.length > 0 ? todayRecords[todayRecords.length - 1] : null;
- };
-
  // ユーザー切り替え
  const switchUser = (direction: number) => {
-   if (users.length <= 1) return; // 1人以下の場合は切り替えしない
+   if (users.length <= 1) return;
    
    setCurrentUserIndex(prev => {
      const newIndex = prev + direction;
@@ -83,31 +63,88 @@ export default function HomeScreen() {
    });
  };
 
- // スワイプジェスチャーでユーザー切り替え
- const panResponder = useRef(
-   PanResponder.create({
-     onStartShouldSetPanResponder: () => true,
-     onPanResponderGrant: () => {
-       lastSwipeX.current = 0;
-     },
-     onPanResponderMove: (evt, gestureState) => {
-       const threshold = 100; // スワイプの閾値
-       const distance = gestureState.dx - lastSwipeX.current;
 
-       if (Math.abs(distance) >= threshold) {
-         const direction = distance > 0 ? -1 : 1; // 右スワイプで前のユーザー
-         switchUser(direction);
-         lastSwipeX.current = gestureState.dx;
-       }
-     },
-     onPanResponderRelease: () => {
-       lastSwipeX.current = 0;
-     },
-   })
- ).current;
+ // プロフィール編集を開始
+ const startEditProfile = () => {
+   const user = users[currentUserIndex];
+   setEditName(user.name);
+   setEditAge(user.age.toString());
+   setShowEditProfile(true);
+ };
+
+ // プロフィール保存
+ const saveProfile = async () => {
+   if (!editName.trim()) {
+     Alert.alert('エラー', '名前を入力してください');
+     return;
+   }
+   
+   const ageNum = parseInt(editAge);
+   if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
+     Alert.alert('エラー', '正しい年齢を入力してください');
+     return;
+   }
+
+   try {
+     const updatedUsers = [...users];
+     updatedUsers[currentUserIndex] = {
+       ...updatedUsers[currentUserIndex],
+       name: editName.trim(),
+       age: ageNum
+     };
+     
+     setUsers(updatedUsers);
+     await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
+     setShowEditProfile(false);
+     
+     Alert.alert('保存完了', 'プロフィールを更新しました');
+   } catch (error) {
+     console.error('保存エラー:', error);
+     Alert.alert('エラー', 'プロフィールの保存に失敗しました');
+   }
+ };
+
+ // 新しいユーザーを追加
+ const addNewUser = async () => {
+   if (!newName.trim()) {
+     Alert.alert('エラー', '名前を入力してください');
+     return;
+   }
+   
+   const ageNum = parseInt(newAge);
+   if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
+     Alert.alert('エラー', '正しい年齢を入力してください');
+     return;
+   }
+
+   try {
+     const newUser: User = {
+       id: Date.now().toString(),
+       name: newName.trim(),
+       age: ageNum,
+       avatar: '👤',
+       createdAt: Date.now()
+     };
+     
+     const updatedUsers = [...users, newUser];
+     setUsers(updatedUsers);
+     await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
+     
+     // 新しく追加したユーザーに切り替え
+     setCurrentUserIndex(updatedUsers.length - 1);
+     
+     setShowAddUser(false);
+     setNewName('');
+     setNewAge('');
+     
+     Alert.alert('追加完了', `${newName.trim()} を追加しました`);
+   } catch (error) {
+     console.error('ユーザー追加エラー:', error);
+     Alert.alert('エラー', 'ユーザーの追加に失敗しました');
+   }
+ };
 
   const currentUser = users.length > 0 ? users[currentUserIndex] : null;
-  const todayGlucose = getTodayLatestGlucose();
 
   if (!currentUser) {
     return (
@@ -119,12 +156,9 @@ export default function HomeScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* スワイプエリア */}
-      <View style={styles.swipeContainer} {...panResponder.panHandlers}>
-        
+      <View style={styles.swipeContainer}>
         {/* メインプロフィールカード */}
         <View style={styles.profileCard}>
-          
           {/* アバター */}
           <View style={styles.avatarContainer}>
             <Text style={styles.avatarEmoji}>{currentUser.avatar}</Text>
@@ -133,32 +167,28 @@ export default function HomeScreen() {
           {/* ユーザー名 */}
           <Text style={styles.userName}>{currentUser.name}</Text>
           <Text style={styles.userAge}>{currentUser.age}歳</Text>
-          
-          {/* 今日の血糖値 */}
-          <View style={styles.todaySection}>
-            <Text style={styles.todayLabel}>今日の最新</Text>
-            {todayGlucose ? (
-              <>
-                <Text style={styles.todayValue}>{todayGlucose.value}</Text>
-                <Text style={styles.todayUnit}>mg/dL</Text>
-                <Text style={styles.todayTime}>
-                  {new Date(todayGlucose.timestamp).toLocaleTimeString('ja-JP', { 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                  })}
-                </Text>
-              </>
-            ) : (
-              <Text style={styles.noDataText}>記録なし</Text>
-            )}
-          </View>
         </View>
 
-        {/* ユーザー切り替えヒント */}
+        {/* ユーザー切り替えエリア */}
         {users.length > 1 && (
-          <View style={styles.swipeHint}>
-            <Text style={styles.swipeHintText}>◀ スワイプでユーザー切り替え ▶</Text>
-            <Text style={styles.userCounter}>{currentUserIndex + 1} / {users.length}</Text>
+          <View style={styles.switchContainer}>
+            <TouchableOpacity 
+              style={styles.switchButton}
+              onPress={() => switchUser(-1)}
+            >
+              <Text style={styles.switchButtonText}>◀</Text>
+            </TouchableOpacity>
+            
+            <View style={styles.swipeHint}>
+              <Text style={styles.userCounter}>{currentUserIndex + 1} / {users.length}</Text>
+            </View>
+            
+            <TouchableOpacity 
+              style={styles.switchButton}
+              onPress={() => switchUser(1)}
+            >
+              <Text style={styles.switchButtonText}>▶</Text>
+            </TouchableOpacity>
           </View>
         )}
 
@@ -166,19 +196,129 @@ export default function HomeScreen() {
         <View style={styles.actionButtons}>
           <TouchableOpacity 
             style={styles.actionButton}
-            onPress={() => console.log('プロフィール編集')}
+            onPress={startEditProfile}
           >
             <Text style={styles.actionButtonText}>プロフィール編集</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
             style={[styles.actionButton, styles.addButton]}
-            onPress={() => console.log('家族追加')}
+            onPress={() => setShowAddUser(true)}
           >
-            <Text style={styles.addButtonText}>+ 家族を追加</Text>
+            <Text style={styles.addButtonText}>+ ユーザーを追加</Text>
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* プロフィール編集モーダル */}
+      <Modal
+        visible={showEditProfile}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowEditProfile(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContent}>
+            <Text style={styles.editModalTitle}>プロフィール編集</Text>
+            
+            <View style={styles.editFieldContainer}>
+              <Text style={styles.fieldLabel}>名前</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="名前を入力"
+                placeholderTextColor="#999"
+              />
+            </View>
+            
+            <View style={styles.editFieldContainer}>
+              <Text style={styles.fieldLabel}>年齢</Text>
+              <TextInput
+                style={styles.textInput}
+                value={editAge}
+                onChangeText={setEditAge}
+                placeholder="年齢を入力"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+            
+            <View style={styles.editButtonContainer}>
+              <TouchableOpacity
+                style={[styles.editButton, styles.cancelButton]}
+                onPress={() => setShowEditProfile(false)}
+              >
+                <Text style={styles.cancelButtonText}>キャンセル</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.editButton, styles.saveButton]}
+                onPress={saveProfile}
+              >
+                <Text style={styles.saveButtonText}>保存</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ユーザー追加モーダル */}
+      <Modal
+        visible={showAddUser}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowAddUser(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContent}>
+            <Text style={styles.editModalTitle}>ユーザー追加</Text>
+            
+            <View style={styles.editFieldContainer}>
+              <Text style={styles.fieldLabel}>名前</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newName}
+                onChangeText={setNewName}
+                placeholder="名前を入力"
+                placeholderTextColor="#999"
+              />
+            </View>
+            
+            <View style={styles.editFieldContainer}>
+              <Text style={styles.fieldLabel}>年齢</Text>
+              <TextInput
+                style={styles.textInput}
+                value={newAge}
+                onChangeText={setNewAge}
+                placeholder="年齢を入力"
+                placeholderTextColor="#999"
+                keyboardType="numeric"
+              />
+            </View>
+            
+            <View style={styles.editButtonContainer}>
+              <TouchableOpacity
+                style={[styles.editButton, styles.cancelButton]}
+                onPress={() => {
+                  setShowAddUser(false);
+                  setNewName('');
+                  setNewAge('');
+                }}
+              >
+                <Text style={styles.cancelButtonText}>キャンセル</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.editButton, styles.saveButton]}
+                onPress={addNewUser}
+              >
+                <Text style={styles.saveButtonText}>追加</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -229,45 +369,28 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 30,
   },
-  todaySection: {
+  switchContainer: {
+    flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    marginTop: 30,
+    justifyContent: 'center',
+  },
+  switchButton: {
+    width: 40,
+    height: 40,
     borderRadius: 20,
-    padding: 25,
-    width: '100%',
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginHorizontal: 20,
   },
-  todayLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginBottom: 10,
-  },
-  todayValue: {
-    fontSize: 36,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  todayUnit: {
-    fontSize: 16,
-    color: '#666',
-    marginBottom: 5,
-  },
-  todayTime: {
-    fontSize: 14,
-    color: '#999',
-  },
-  noDataText: {
+  switchButtonText: {
+    color: '#fff',
     fontSize: 18,
-    color: '#ccc',
-    fontStyle: 'italic',
+    fontWeight: 'bold',
   },
   swipeHint: {
     alignItems: 'center',
-    marginTop: 30,
-  },
-  swipeHintText: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 5,
   },
   userCounter: {
     fontSize: 14,
@@ -299,6 +422,73 @@ const styles = StyleSheet.create({
     backgroundColor: '#007AFF',
   },
   addButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  editModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 30,
+    width: width * 0.85,
+    maxWidth: 400,
+  },
+  editModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#333',
+  },
+  editFieldContainer: {
+    marginBottom: 20,
+  },
+  fieldLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  textInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 15,
+    fontSize: 16,
+    backgroundColor: '#f8f9fa',
+    color: '#333',
+  },
+  editButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  editButton: {
+    flex: 1,
+    paddingVertical: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f8f9fa',
+    marginRight: 10,
+  },
+  saveButton: {
+    backgroundColor: '#007AFF',
+    marginLeft: 10,
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  saveButtonText: {
+    fontSize: 16,
     color: '#fff',
     fontWeight: 'bold',
   },

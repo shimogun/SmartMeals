@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { useColorScheme } from '@/components/useColorScheme';
+import { Platform } from 'react-native';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -38,6 +39,50 @@ export default function RootLayout() {
       SplashScreen.hideAsync();
     }
   }, [loaded]);
+
+  // Web PWA設定
+  useEffect(() => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      // メタタグを動的に設定
+      const metaViewport = document.querySelector('meta[name="viewport"]');
+      if (metaViewport) {
+        metaViewport.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover');
+      }
+
+      // PWA用のメタタグを追加
+      const head = document.head;
+      
+      // Apple Touch Icon
+      const appleTouchIcon = document.createElement('link');
+      appleTouchIcon.rel = 'apple-touch-icon';
+      appleTouchIcon.href = '/icon-192x192.png';
+      head.appendChild(appleTouchIcon);
+
+      // Apple Mobile Web App Capable
+      const appleCapable = document.createElement('meta');
+      appleCapable.name = 'apple-mobile-web-app-capable';
+      appleCapable.content = 'yes';
+      head.appendChild(appleCapable);
+
+      // Apple Mobile Web App Status Bar Style
+      const appleStatusBar = document.createElement('meta');
+      appleStatusBar.name = 'apple-mobile-web-app-status-bar-style';
+      appleStatusBar.content = 'black-translucent';
+      head.appendChild(appleStatusBar);
+
+      // Theme Color
+      const themeColor = document.createElement('meta');
+      themeColor.name = 'theme-color';
+      themeColor.content = '#00BCD4';
+      head.appendChild(themeColor);
+
+      // Manifest
+      const manifest = document.createElement('link');
+      manifest.rel = 'manifest';
+      manifest.href = '/manifest.json';
+      head.appendChild(manifest);
+    }
+  }, []);
 
   if (!loaded) {
     return null;

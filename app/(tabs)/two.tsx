@@ -1,7 +1,8 @@
-import { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, PanResponder, Alert, Platform, TextInput, Modal, Dimensions, ScrollView } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Dimensions, Modal, PanResponder, Platform, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import localMealEngine, { UserHealthProfile } from '../../services/localMealEngine';
 import secureAiService from '../../services/secureAiService';
 
@@ -12,6 +13,7 @@ type GlucoseRecord = {
   date: string;
   mealType: string;
   mealNote: string;
+  userId?: string; // ユーザーIDを追加
 };
 
 type MealSuggestion = {
@@ -37,7 +39,7 @@ export default function MealScreen() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
-  const [selectedMealType, setSelectedMealType] = useState('空腹時');
+  const [selectedMealType, setSelectedMealType] = useState('朝');
   const [mealNote, setMealNote] = useState('');
   const [showMealModal, setShowMealModal] = useState(false);
   
@@ -57,17 +59,21 @@ export default function MealScreen() {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showRecipeModal, setShowRecipeModal] = useState(false);
   const [selectedMeal, setSelectedMeal] = useState<MealSuggestion | null>(null);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [users, setUsers] = useState<any[]>([]);
   
   // ローカル献立エンジン管理用（APIキー不要）
 
 
-  const mealTypes = ['空腹時', '朝食前', '朝食後', '昼食前', '昼食後', '夕食前', '夕食後', '就寝前'];
+  const mealTypes = ['朝', '昼', '夜'];
   
   // 血糖値スワイプ用
   const lastUpdateX = useRef(0);
 
   useEffect(() => {
     loadRecords();
+    loadUsers();
     // 初期値として今日から7日後をセット
     const today = new Date();
     const weekLater = new Date(today);
@@ -75,6 +81,35 @@ export default function MealScreen() {
     setSelectedWeekStart(today);
     setSelectedWeekEnd(weekLater);
   }, []);
+
+  // ユーザーデータ読み込み
+  const loadUsers = async () => {
+    try {
+      const storedUsers = await AsyncStorage.getItem('users');
+      if (storedUsers) {
+        const parsedUsers = JSON.parse(storedUsers);
+        setUsers(parsedUsers);
+        // 初回は最初のユーザーを選択
+        if (parsedUsers.length > 0 && !selectedUserId) {
+          setSelectedUserId(parsedUsers[0].id);
+        }
+      } else {
+        // デフォルトユーザー作成
+        const defaultUser = {
+          id: Date.now().toString(),
+          name: 'あなた',
+          age: 30,
+          avatar: '👤',
+          createdAt: Date.now()
+        };
+        setUsers([defaultUser]);
+        setSelectedUserId(defaultUser.id);
+        await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
+      }
+    } catch (error) {
+      console.error('ユーザー読み込みエラー:', error);
+    }
+  };
 
   // ユーザー数を取得
   const getUserCount = async () => {
@@ -110,7 +145,8 @@ export default function MealScreen() {
       timestamp: selectedDate.getTime(),
       date: selectedDate.toISOString().split('T')[0],
       mealType: selectedMealType,
-      mealNote: mealNote
+      mealNote: mealNote,
+      userId: selectedUserId
     };
 
     try {
@@ -118,9 +154,12 @@ export default function MealScreen() {
       await AsyncStorage.setItem('glucose_records', JSON.stringify(newRecords));
       setRecords(newRecords);
       
+      const selectedUser = users.find(u => u.id === selectedUserId);
+      const userName = selectedUser ? selectedUser.name : 'ユーザー';
+      
       Alert.alert(
         '記録完了',
-        `血糖値 ${glucose} mg/dL を記録しました`,
+        `${userName}の血糖値 ${glucose} mg/dL を記録しました`,
         [{ text: 'OK' }]
       );
       
@@ -197,39 +236,39 @@ export default function MealScreen() {
       
       let aiGenerationSuccess = false;
       
-      // まずローカルエンジンを試行（安定性優先）
-      try {
-        console.log('🏠 ローカルAI献立生成エンジンを使用中...');
-        const localMeals = await localMealEngine.generatePersonalizedMeals(
-          userProfile,
-          dayDiff,
-          userCount,
-          startDate
-        );
-        
-        weeklyData = convertLocalToAppFormat(localMeals);
-        console.log('✅ ローカルエンジンによる献立生成成功');
-        
-      } catch (localError) {
-        console.warn('ローカルエンジン失敗、ChatGPT APIを試行:', localError);
-        
-        // ローカル失敗時にChatGPT APIを試行
-        if (secureAiService.isAvailable()) {
+      // ChatGPT APIを優先して試行
+      if (secureAiService.isAvailable()) {
+        try {
+          console.log('🧠 ChatGPT APIを使用した高品質献立生成中...');
+          const chatGptMeals = await secureAiService.generateMeals(
+            userProfile,
+            dayDiff,
+            userCount,
+            startDate
+          );
+          
+          weeklyData = convertLocalToAppFormat(chatGptMeals);
+          aiGenerationSuccess = true;
+          console.log('✅ ChatGPT APIによる献立生成成功');
+          
+        } catch (chatGptError) {
+          console.warn('ChatGPT API失敗、ローカルエンジンを試行:', chatGptError);
+          
+          // ChatGPT失敗時にローカルエンジンを試行
           try {
-            console.log('🧠 ChatGPT APIを使用した高品質献立生成中...');
-            const chatGptMeals = await secureAiService.generateMeals(
+            console.log('🏠 ローカルAI献立生成エンジンを使用中...');
+            const localMeals = await localMealEngine.generatePersonalizedMeals(
               userProfile,
               dayDiff,
               userCount,
               startDate
             );
             
-            weeklyData = convertLocalToAppFormat(chatGptMeals);
-            aiGenerationSuccess = true;
-            console.log('✅ ChatGPT APIによる献立生成成功');
+            weeklyData = convertLocalToAppFormat(localMeals);
+            console.log('✅ ローカルエンジンによる献立生成成功');
             
-          } catch (chatGptError) {
-            console.warn('ChatGPT API利用失敗、最終フォールバック使用:', chatGptError);
+          } catch (localError) {
+            console.warn('ローカルエンジンも失敗、最終フォールバック使用:', localError);
             
             // 最終フォールバック
             const fallbackMeals = await localMealEngine.generateSampleMeals(dayDiff, userCount, startDate);
@@ -241,8 +280,25 @@ export default function MealScreen() {
               [{ text: 'OK' }]
             );
           }
-        } else {
-          // API未設定の場合は最終フォールバック
+        }
+      } else {
+        // API未設定の場合はローカルエンジンを使用
+        try {
+          console.log('🏠 ローカルAI献立生成エンジンを使用中...');
+          const localMeals = await localMealEngine.generatePersonalizedMeals(
+            userProfile,
+            dayDiff,
+            userCount,
+            startDate
+          );
+          
+          weeklyData = convertLocalToAppFormat(localMeals);
+          console.log('✅ ローカルエンジンによる献立生成成功');
+          
+        } catch (localError) {
+          console.warn('ローカルエンジン失敗、最終フォールバック使用:', localError);
+          
+          // 最終フォールバック
           const fallbackMeals = await localMealEngine.generateSampleMeals(dayDiff, userCount, startDate);
           weeklyData = convertLocalToAppFormat(fallbackMeals);
         }
@@ -455,6 +511,31 @@ export default function MealScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.stepScrollContent}
       >
+        {/* ユーザー選択セクション */}
+        {users.length > 1 && (
+          <View style={styles.userSelectionSection}>
+            <Text style={styles.userSectionTitle}>👤 記録対象ユーザー</Text>
+            <View style={styles.userSelectionContainer}>
+              {users.map((user) => (
+                <TouchableOpacity
+                  key={user.id}
+                  style={[
+                    styles.userSelectionOption,
+                    selectedUserId === user.id && styles.userSelectionOptionActive
+                  ]}
+                  onPress={() => setSelectedUserId(user.id)}
+                >
+                  <Text style={styles.userSelectionEmoji}>{user.avatar}</Text>
+                  <Text style={[
+                    styles.userSelectionName,
+                    selectedUserId === user.id && styles.userSelectionNameActive
+                  ]}>{user.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
+
         <View style={styles.glucoseInputCard}>
         <View style={styles.valueContainer}>
           <Text style={styles.valueText}>{glucose}</Text>
@@ -496,51 +577,49 @@ export default function MealScreen() {
         <View style={styles.variableDataSection}>
           <Text style={styles.variableSectionTitle}>📊 その他の数値</Text>
           
-          <View style={styles.variableRowsContainer}>
-            {/* HbA1c入力 */}
-            <View style={styles.variableColumn}>
-              <Text style={styles.variableLabel}>HbA1c (%)</Text>
-              <TextInput
-                style={styles.variableInput}
-                value={currentHba1c}
-                onChangeText={setCurrentHba1c}
-                placeholder="6.5"
-                keyboardType="numeric"
-                placeholderTextColor="#999"
-              />
-            </View>
+          {/* HbA1c入力 */}
+          <View style={styles.variableHorizontalRow}>
+            <Text style={styles.variableHorizontalLabel}>HbA1c (%)</Text>
+            <TextInput
+              style={styles.variableHorizontalInput}
+              value={currentHba1c}
+              onChangeText={setCurrentHba1c}
+              placeholder="6.5"
+              keyboardType="numeric"
+              placeholderTextColor="#999"
+            />
+          </View>
 
-            {/* 体調選択 */}
-            <View style={styles.variableColumn}>
-              <Text style={styles.variableLabel}>今日の体調</Text>
-              <View style={styles.conditionContainer}>
-                {[
-                  { key: 'good', label: '良好', color: '#28a745' },
-                  { key: 'normal', label: '普通', color: '#6c757d' },
-                  { key: 'poor', label: '不調', color: '#dc3545' }
-                ].map((item) => (
-                  <TouchableOpacity
-                    key={item.key}
-                    style={[
-                      styles.conditionButton,
-                      currentCondition === item.key && { backgroundColor: item.color }
-                    ]}
-                    onPress={() => setCurrentCondition(item.key as any)}
-                  >
-                    <Text style={[
-                      styles.conditionText,
-                      currentCondition === item.key && styles.conditionTextActive
-                    ]}>{item.label}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          {/* 体調選択 */}
+          <View style={styles.variableHorizontalRow}>
+            <Text style={styles.variableHorizontalLabel}>今日の体調</Text>
+            <View style={styles.conditionHorizontalContainer}>
+              {[
+                { key: 'good', label: '良好', color: '#28a745' },
+                { key: 'normal', label: '普通', color: '#6c757d' },
+                { key: 'poor', label: '不調', color: '#dc3545' }
+              ].map((item) => (
+                <TouchableOpacity
+                  key={item.key}
+                  style={[
+                    styles.conditionHorizontalButton,
+                    currentCondition === item.key && { backgroundColor: item.color }
+                  ]}
+                  onPress={() => setCurrentCondition(item.key as any)}
+                >
+                  <Text style={[
+                    styles.conditionHorizontalText,
+                    currentCondition === item.key && styles.conditionTextActive
+                  ]}>{item.label}</Text>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
           {/* 食事制限レベル */}
-          <View style={styles.variableRow}>
-            <Text style={styles.variableLabel}>食事制限レベル</Text>
-            <View style={styles.restrictionContainer}>
+          <View style={styles.variableHorizontalRow}>
+            <Text style={styles.variableHorizontalLabel}>食事制限レベル</Text>
+            <View style={styles.restrictionHorizontalContainer}>
               {[
                 { key: 'strict', label: '厳格' },
                 { key: 'normal', label: '普通' },
@@ -549,13 +628,13 @@ export default function MealScreen() {
                 <TouchableOpacity
                   key={item.key}
                   style={[
-                    styles.restrictionButton,
+                    styles.restrictionHorizontalButton,
                     dietRestriction === item.key && styles.restrictionButtonActive
                   ]}
                   onPress={() => setDietRestriction(item.key as any)}
                 >
                   <Text style={[
-                    styles.restrictionText,
+                    styles.restrictionHorizontalText,
                     dietRestriction === item.key && styles.restrictionTextActive
                   ]}>{item.label}</Text>
                 </TouchableOpacity>
@@ -565,26 +644,9 @@ export default function MealScreen() {
         </View>
 
         <TouchableOpacity style={styles.recordButton} onPress={saveRecordAndProceed}>
-          <Text style={styles.recordButtonText}>記録してAI献立を生成</Text>
+          <Text style={styles.recordButtonText}>献立を生成</Text>
         </TouchableOpacity>
         
-        <View style={styles.aiInfoCard}>
-          <Text style={styles.aiInfoTitle}>
-            {secureAiService.isAvailable() ? '🧠 ChatGPT + ローカルAI' : '🤖 ローカルAI献立生成'}
-          </Text>
-          <Text style={styles.aiInfoText}>
-            {secureAiService.isAvailable() 
-              ? 'ChatGPT APIが設定済み。高品質な個別最適化献立を生成します'
-              : 'あなたの健康データを分析して最適な献立を自動生成します'
-            }
-          </Text>
-          <Text style={styles.aiInfoSubtext}>
-            {secureAiService.isAvailable()
-              ? '• ChatGPT高品質生成 • ローカルフォールバック • セキュア設定'
-              : '• 血糖値管理に特化 • 栄養バランス最適化 • API不要'
-            }
-          </Text>
-        </View>
         </View>
       </ScrollView>
     </View>
@@ -849,6 +911,40 @@ export default function MealScreen() {
               onPress={() => setShowRecipeModal(false)}
             >
               <Text style={styles.recipeCloseText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 設定モーダル */}
+      <Modal
+        visible={showSettingsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>設定</Text>
+            
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>🔧 献立生成設定</Text>
+              <Text style={styles.settingsItem}>• AI生成エンジン</Text>
+              <Text style={styles.settingsItem}>• 食事制限設定</Text>
+              <Text style={styles.settingsItem}>• カロリー目標設定</Text>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>ℹ️ アプリ情報</Text>
+              <Text style={styles.settingsItem}>バージョン: 1.0.0</Text>
+              <Text style={styles.settingsItem}>© 2024 SmartMeals</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowSettingsModal(false)}
+            >
+              <Text style={styles.modalCloseText}>閉じる</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1369,6 +1465,8 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 20,
     marginVertical: 15,
+    width: '98%',
+    alignSelf: 'center',
   },
   variableSectionTitle: {
     fontSize: 16,
@@ -1479,5 +1577,144 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 18,
+  },
+  variableHorizontalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 15,
+    paddingVertical: 5,
+  },
+  variableHorizontalLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    flex: 1,
+  },
+  variableHorizontalInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    color: '#333',
+    textAlign: 'center',
+  },
+  conditionHorizontalContainer: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-around',
+  },
+  conditionHorizontalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#e9ecef',
+    minWidth: 45,
+    alignItems: 'center',
+  },
+  conditionHorizontalText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  restrictionHorizontalContainer: {
+    flexDirection: 'row',
+    flex: 1,
+    justifyContent: 'space-around',
+  },
+  restrictionHorizontalButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    backgroundColor: '#e9ecef',
+    minWidth: 45,
+    alignItems: 'center',
+  },
+  restrictionHorizontalText: {
+    fontSize: 12,
+    color: '#333',
+    fontWeight: '600',
+  },
+  settingsButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  settingsSection: {
+    marginBottom: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+  },
+  settingsSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 5,
+  },
+  settingsItem: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 5,
+    paddingLeft: 10,
+  },
+  userSelectionSection: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    width: '98%',
+    alignSelf: 'center',
+  },
+  userSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  userSelectionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  userSelectionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderWidth: 2,
+    borderColor: '#ddd',
+    borderRadius: 25,
+    padding: 12,
+    margin: 5,
+    minWidth: 100,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  userSelectionOptionActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+    shadowOpacity: 0.3,
+  },
+  userSelectionEmoji: {
+    fontSize: 20,
+    marginRight: 8,
+  },
+  userSelectionName: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  userSelectionNameActive: {
+    color: '#fff',
   },
 });

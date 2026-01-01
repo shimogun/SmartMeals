@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, SafeAreaView, ScrollView, Dimensions, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, SafeAreaView, ScrollView, Dimensions, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { LineChart } from 'react-native-chart-kit';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -10,20 +11,78 @@ type GlucoseRecord = {
   date: string;
   mealType: string;
   mealNote: string;
+  userId?: string; // ユーザーIDを追加
 };
 
 type TimeRange = '1week' | '1month' | '3months';
 
+type WeeklyRecord = {
+  id: string;
+  weekStart: string; // 週の開始日 (YYYY-MM-DD)
+  weight: number | null;
+  exercise: 'high' | 'normal' | 'low' | null;
+  condition: 'good' | 'normal' | 'poor' | null;
+  hba1c: number | null;
+  timestamp: number;
+};
+
 export default function ChartScreen() {
   const [records, setRecords] = useState<GlucoseRecord[]>([]);
+  const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
   const [timeRange, setTimeRange] = useState<TimeRange>('1week');
+  const [showWeeklyForm, setShowWeeklyForm] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const [users, setUsers] = useState<any[]>([]);
   const screenWidth = Dimensions.get('window').width;
 
   useEffect(() => {
     loadRecords();
-    const focusListener = () => loadRecords();
+    loadWeeklyRecords();
+    loadUsers();
+    const focusListener = () => {
+      loadRecords();
+      loadWeeklyRecords();
+    };
     return () => {};
   }, []);
+
+  // ユーザー選択が変更されたときの処理
+  useEffect(() => {
+    // ユーザーが選択されている場合、グラフのデータを更新
+    if (selectedUserId && records.length > 0) {
+      console.log(`ユーザー切り替え: ${selectedUserId}`);
+    }
+  }, [selectedUserId, records]);
+
+  // ユーザーデータ読み込み
+  const loadUsers = async () => {
+    try {
+      const storedUsers = await AsyncStorage.getItem('users');
+      if (storedUsers) {
+        const parsedUsers = JSON.parse(storedUsers);
+        setUsers(parsedUsers);
+        // 初回は最初のユーザーを選択
+        if (parsedUsers.length > 0 && !selectedUserId) {
+          setSelectedUserId(parsedUsers[0].id);
+        }
+      } else {
+        // デフォルトユーザー作成
+        const defaultUser = {
+          id: Date.now().toString(),
+          name: 'あなた',
+          age: 30,
+          avatar: '👤',
+          createdAt: Date.now()
+        };
+        setUsers([defaultUser]);
+        setSelectedUserId(defaultUser.id);
+        await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
+      }
+    } catch (error) {
+      console.error('ユーザー読み込みエラー:', error);
+    }
+  };
 
   const loadRecords = async () => {
     try {
@@ -34,6 +93,18 @@ export default function ChartScreen() {
       }
     } catch (error) {
       console.error('データ読み込みエラー:', error);
+    }
+  };
+
+  const loadWeeklyRecords = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('weekly_records');
+      if (stored) {
+        const parsedRecords = JSON.parse(stored);
+        setWeeklyRecords(parsedRecords.sort((a, b) => a.timestamp - b.timestamp));
+      }
+    } catch (error) {
+      console.error('週間データ読み込みエラー:', error);
     }
   };
 
@@ -56,7 +127,18 @@ export default function ChartScreen() {
         break;
     }
     
-    return records.filter(record => record.timestamp >= startDate.getTime());
+    let filtered = records.filter(record => record.timestamp >= startDate.getTime());
+    
+    // 選択されたユーザーのデータのみフィルタ
+    if (selectedUserId) {
+      filtered = filtered.filter(record => 
+        record.userId === selectedUserId || 
+        (!record.userId && users.length > 0 && users[0].id === selectedUserId) // 古いデータ（userIdがない）は最初のユーザーとして扱う
+      );
+    }
+    
+    console.log(`期間: ${timeRange}, ユーザー: ${selectedUserId}, 全データ: ${records.length}件, フィルター後: ${filtered.length}件`);
+    return filtered;
   };
 
   const getChartData = () => {
@@ -132,7 +214,7 @@ export default function ChartScreen() {
   // 食事タイミング別統計
   const getMealTypeStats = () => {
     const filteredRecords = getFilteredRecords();
-    const mealTypes = ['朝食前', '朝食後', '昼食前', '昼食後', '夕食前', '夕食後'];
+    const mealTypes = ['朝', '昼', '夜'];
     
     return mealTypes.map(type => {
       const typeRecords = filteredRecords.filter(r => r.mealType === type);
@@ -183,10 +265,63 @@ export default function ChartScreen() {
     }
   };
 
+  // 週間記録を保存
+  const saveWeeklyRecord = async (weeklyRecord: Omit<WeeklyRecord, 'id' | 'timestamp'>) => {
+    try {
+      const newRecord: WeeklyRecord = {
+        ...weeklyRecord,
+        id: Date.now().toString(),
+        timestamp: Date.now(),
+      };
+
+      const newRecords = [...weeklyRecords, newRecord];
+      await AsyncStorage.setItem('weekly_records', JSON.stringify(newRecords));
+      setWeeklyRecords(newRecords);
+      
+      Alert.alert('記録完了', '週間記録を保存しました');
+    } catch (error) {
+      console.error('週間記録保存エラー:', error);
+      Alert.alert('エラー', '週間記録の保存に失敗しました');
+    }
+  };
+
+  // 今週の週開始日を取得
+  const getCurrentWeekStart = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const mondayDate = new Date(today);
+    mondayDate.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    return mondayDate.toISOString().split('T')[0];
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
-        <Text style={styles.title}>経過分析</Text>
+        
+        {/* ユーザー選択セクション */}
+        {users.length > 1 && (
+          <View style={styles.userSelectionSection}>
+            <Text style={styles.userSectionTitle}>👤 表示対象ユーザー</Text>
+            <View style={styles.userSelectionContainer}>
+              {users.map((user) => (
+                <TouchableOpacity
+                  key={user.id}
+                  style={[
+                    styles.userSelectionOption,
+                    selectedUserId === user.id && styles.userSelectionOptionActive
+                  ]}
+                  onPress={() => setSelectedUserId(user.id)}
+                >
+                  <Text style={styles.userSelectionEmoji}>{user.avatar}</Text>
+                  <Text style={[
+                    styles.userSelectionName,
+                    selectedUserId === user.id && styles.userSelectionNameActive
+                  ]}>{user.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        )}
         
         {/* 期間選択 */}
         <View style={styles.timeRangeContainer}>
@@ -242,7 +377,7 @@ export default function ChartScreen() {
 
             {/* グラフ */}
             <View style={styles.chartContainer}>
-              <Text style={styles.chartTitle}>血糖値推移（{getTimeRangeText()}）</Text>
+              <Text style={styles.chartTitle}>血糖値推移（{getTimeRangeText()}）- {getFilteredRecords().length}件</Text>
               <LineChart
                 data={getChartData()}
                 width={screenWidth - 40}
@@ -292,12 +427,217 @@ export default function ChartScreen() {
             </View>
 
             <Text style={styles.recordCount}>
-              記録数: {records.length}件
+              総記録数: {records.length}件 | {getTimeRangeText()}期間: {getFilteredRecords().length}件
             </Text>
+
+            {/* 週間記録追加ボタン */}
+            <TouchableOpacity 
+              style={styles.weeklyRecordButton}
+              onPress={() => setShowWeeklyForm(true)}
+            >
+              <Text style={styles.weeklyRecordButtonText}>📊 週間記録を追加</Text>
+            </TouchableOpacity>
           </>
         )}
       </ScrollView>
+
+      {/* 週間記録入力モーダル */}
+      <WeeklyRecordModal 
+        visible={showWeeklyForm}
+        onClose={() => setShowWeeklyForm(false)}
+        onSave={saveWeeklyRecord}
+      />
+
+      {/* 設定モーダル */}
+      <Modal
+        visible={showSettingsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>設定</Text>
+            
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>📊 データ管理</Text>
+              <Text style={styles.settingsItem}>• データのエクスポート</Text>
+              <Text style={styles.settingsItem}>• グラフ表示設定</Text>
+              <Text style={styles.settingsItem}>• 記録通知設定</Text>
+            </View>
+
+            <View style={styles.settingsSection}>
+              <Text style={styles.settingsSectionTitle}>ℹ️ アプリ情報</Text>
+              <Text style={styles.settingsItem}>バージョン: 1.0.0</Text>
+              <Text style={styles.settingsItem}>© 2024 SmartMeals</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowSettingsModal(false)}
+            >
+              <Text style={styles.modalCloseText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
+  );
+}
+
+// 週間記録入力モーダル
+function WeeklyRecordModal({ 
+  visible, 
+  onClose, 
+  onSave 
+}: { 
+  visible: boolean; 
+  onClose: () => void; 
+  onSave: (record: Omit<WeeklyRecord, 'id' | 'timestamp'>) => void; 
+}) {
+  const [weight, setWeight] = useState('');
+  const [exercise, setExercise] = useState<'high' | 'normal' | 'low' | null>('normal');
+  const [condition, setCondition] = useState<'good' | 'normal' | 'poor' | null>('normal');
+  const [hba1c, setHba1c] = useState('');
+
+  // 今週の週開始日を取得
+  const getCurrentWeekStart = () => {
+    const today = new Date();
+    const dayOfWeek = today.getDay();
+    const mondayDate = new Date(today);
+    mondayDate.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+    return mondayDate.toISOString().split('T')[0];
+  };
+
+  const handleSave = () => {
+    const weeklyRecord = {
+      weekStart: getCurrentWeekStart(),
+      weight: weight ? parseFloat(weight) : null,
+      exercise,
+      condition,
+      hba1c: hba1c ? parseFloat(hba1c) : null,
+    };
+
+    onSave(weeklyRecord);
+    
+    // フォームリセット
+    setWeight('');
+    setExercise('normal');
+    setCondition('normal');
+    setHba1c('');
+    
+    onClose();
+  };
+
+  return (
+    <Modal
+      visible={visible}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={onClose}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.weeklyModalContent}>
+          <Text style={styles.weeklyModalTitle}>週間記録を追加</Text>
+          
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* 体重 */}
+            <View style={styles.weeklyInputSection}>
+              <Text style={styles.weeklyInputLabel}>体重 (kg)</Text>
+              <TextInput
+                style={styles.weeklyNumberInput}
+                value={weight}
+                onChangeText={setWeight}
+                placeholder="60.5"
+                keyboardType="numeric"
+                placeholderTextColor="#999"
+              />
+            </View>
+
+            {/* 運動レベル */}
+            <View style={styles.weeklyInputSection}>
+              <Text style={styles.weeklyInputLabel}>今週の運動量</Text>
+              <View style={styles.weeklyButtonGroup}>
+                {[
+                  { key: 'high', label: '多い', color: '#4CAF50' },
+                  { key: 'normal', label: '普通', color: '#FF9800' },
+                  { key: 'low', label: '少ない', color: '#F44336' }
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.weeklyButton,
+                      exercise === item.key && { backgroundColor: item.color }
+                    ]}
+                    onPress={() => setExercise(item.key as any)}
+                  >
+                    <Text style={[
+                      styles.weeklyButtonText,
+                      exercise === item.key && styles.weeklyButtonTextActive
+                    ]}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* 体調 */}
+            <View style={styles.weeklyInputSection}>
+              <Text style={styles.weeklyInputLabel}>今週の体調</Text>
+              <View style={styles.weeklyButtonGroup}>
+                {[
+                  { key: 'good', label: '良好', color: '#4CAF50' },
+                  { key: 'normal', label: '普通', color: '#FF9800' },
+                  { key: 'poor', label: '不調', color: '#F44336' }
+                ].map((item) => (
+                  <TouchableOpacity
+                    key={item.key}
+                    style={[
+                      styles.weeklyButton,
+                      condition === item.key && { backgroundColor: item.color }
+                    ]}
+                    onPress={() => setCondition(item.key as any)}
+                  >
+                    <Text style={[
+                      styles.weeklyButtonText,
+                      condition === item.key && styles.weeklyButtonTextActive
+                    ]}>{item.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* HbA1c */}
+            <View style={styles.weeklyInputSection}>
+              <Text style={styles.weeklyInputLabel}>HbA1c (%) ※任意</Text>
+              <TextInput
+                style={styles.weeklyNumberInput}
+                value={hba1c}
+                onChangeText={setHba1c}
+                placeholder="6.5"
+                keyboardType="numeric"
+                placeholderTextColor="#999"
+              />
+            </View>
+          </ScrollView>
+
+          <View style={styles.weeklyModalButtons}>
+            <TouchableOpacity 
+              style={styles.weeklyCancelButton}
+              onPress={onClose}
+            >
+              <Text style={styles.weeklyCancelText}>キャンセル</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity 
+              style={styles.weeklySaveButton}
+              onPress={handleSave}
+            >
+              <Text style={styles.weeklySaveText}>保存</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -307,19 +647,12 @@ const styles = StyleSheet.create({
     backgroundColor: '#f5f5f5',
     padding: 20,
   },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    marginTop: 40,
-    marginBottom: 20,
-    color: '#333',
-    textAlign: 'center',
-  },
   timeRangeContainer: {
     flexDirection: 'row',
     backgroundColor: '#fff',
     borderRadius: 15,
     padding: 4,
+    marginTop: 20,
     marginBottom: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -492,5 +825,188 @@ const styles = StyleSheet.create({
   referenceText: {
     fontSize: 14,
     color: '#666',
+  },
+  weeklyRecordButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 15,
+    paddingVertical: 15,
+    paddingHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 30,
+    alignItems: 'center',
+  },
+  weeklyRecordButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  weeklyModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    margin: 20,
+    maxHeight: '80%',
+    width: '90%',
+  },
+  weeklyModalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#333',
+  },
+  weeklyInputSection: {
+    marginBottom: 20,
+  },
+  weeklyInputLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  weeklyNumberInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    backgroundColor: '#fff',
+    color: '#333',
+  },
+  weeklyButtonGroup: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  weeklyButton: {
+    flex: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    marginHorizontal: 2,
+    alignItems: 'center',
+  },
+  weeklyButtonText: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  weeklyButtonTextActive: {
+    color: '#fff',
+  },
+  weeklyModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  weeklyCancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    marginRight: 10,
+    alignItems: 'center',
+  },
+  weeklyCancelText: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  weeklySaveButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+    marginLeft: 10,
+    alignItems: 'center',
+  },
+  weeklySaveText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  settingsButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  settingsSection: {
+    marginBottom: 20,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+  },
+  settingsSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 5,
+  },
+  settingsItem: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 5,
+    paddingLeft: 10,
+  },
+  userSelectionSection: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  userSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  userSelectionContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+  },
+  userSelectionOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    borderWidth: 2,
+    borderColor: '#e9ecef',
+    borderRadius: 25,
+    padding: 12,
+    margin: 5,
+    minWidth: 100,
+  },
+  userSelectionOptionActive: {
+    backgroundColor: '#007AFF',
+    borderColor: '#007AFF',
+  },
+  userSelectionEmoji: {
+    fontSize: 18,
+    marginRight: 8,
+  },
+  userSelectionName: {
+    fontSize: 14,
+    color: '#333',
+    fontWeight: '600',
+  },
+  userSelectionNameActive: {
+    color: '#fff',
   },
 });

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Dimensions, Modal, TextInput, Alert, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Animated, { 
   useSharedValue, 
@@ -35,6 +36,7 @@ export default function HomeScreen() {
   const [showEditProfile, setShowEditProfile] = useState(false);
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [showUserDetailModal, setShowUserDetailModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAge, setEditAge] = useState('');
   const [newName, setNewName] = useState('');
@@ -337,7 +339,7 @@ const animatedCardStyle = useAnimatedStyle(() => {
   if (!currentUser) {
     return (
       <SafeAreaView style={styles.container}>
-        <Text style={{ color: '#fff', textAlign: 'center', marginTop: 100 }}>Loading...</Text>
+        <Text style={{ color: '#333', textAlign: 'center', marginTop: 100 }}>Loading...</Text>
       </SafeAreaView>
     );
   }
@@ -696,6 +698,40 @@ const animatedCardStyle = useAnimatedStyle(() => {
           </View>
         </View>
       </Modal>
+
+      {/* 設定モーダル */}
+      <Modal
+        visible={showSettingsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowSettingsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.editModalContent}>
+            <Text style={styles.editModalTitle}>設定</Text>
+            
+            <View style={styles.detailSection}>
+              <Text style={styles.detailSectionTitle}>🔧 アプリ設定</Text>
+              <Text style={styles.detailItem}>• データのバックアップ</Text>
+              <Text style={styles.detailItem}>• プライバシー設定</Text>
+              <Text style={styles.detailItem}>• 通知設定</Text>
+            </View>
+
+            <View style={styles.detailSection}>
+              <Text style={styles.detailSectionTitle}>ℹ️ アプリ情報</Text>
+              <Text style={styles.detailItem}>バージョン: 1.0.0</Text>
+              <Text style={styles.detailItem}>© 2024 SmartMeals</Text>
+            </View>
+            
+            <TouchableOpacity
+              style={styles.detailCloseButton}
+              onPress={() => setShowSettingsModal(false)}
+            >
+              <Text style={styles.detailCloseText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -703,7 +739,7 @@ const animatedCardStyle = useAnimatedStyle(() => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000',
+    backgroundColor: '#f5f5f5',
     paddingHorizontal: 20,
   },
   swipeContainer: {

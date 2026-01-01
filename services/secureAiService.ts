@@ -42,12 +42,13 @@ class SecureAiService {
                        process.env.OPENAI_API_KEY || 
                        null;
       
-      console.log('APIキー読み込み状況:', {
-        expoConfigPresent: !!Constants.expoConfig?.extra?.openaiApiKey,
-        processEnvPresent: !!process.env.OPENAI_API_KEY,
-        finalKeyPresent: !!envApiKey,
-        keyFormat: envApiKey ? (envApiKey.startsWith('sk-') ? '正常' : '無効') : 'なし'
-      });
+      console.log('🔍 APIキー読み込みデバッグ情報:');
+      console.log('- Constants.expoConfig存在:', !!Constants.expoConfig);
+      console.log('- Constants.expoConfig.extra存在:', !!Constants.expoConfig?.extra);
+      console.log('- openaiApiKey存在:', !!Constants.expoConfig?.extra?.openaiApiKey);
+      console.log('- process.env.OPENAI_API_KEY存在:', !!process.env.OPENAI_API_KEY);
+      console.log('- 最終APIキー存在:', !!envApiKey);
+      console.log('- APIキー形式:', envApiKey ? (envApiKey.startsWith('sk-') ? '✅正常' : '❌無効') : '❌なし');
       
       if (envApiKey && envApiKey.startsWith('sk-')) {
         this.apiKey = envApiKey;
@@ -192,12 +193,26 @@ class SecureAiService {
       throw new Error('ChatGPT APIが利用できません。環境変数を確認してください。');
     }
 
+    // 長期間の場合は分割生成
+    if (periodDays > 3) {
+      return this.generateMealsWithBatching(userProfile, periodDays, servings, startDate);
+    }
+
+    return this.generateSingleBatch(userProfile, periodDays, servings, startDate);
+  }
+
+  private async generateSingleBatch(
+    userProfile: UserHealthProfile,
+    periodDays: number,
+    servings: number,
+    startDate?: Date
+  ): Promise<{[key: string]: GeneratedMeal[]}> {
     try {
-      console.log('🚀 ChatGPT API呼び出し開始...');
+      console.log(`🚀 ChatGPT API呼び出し開始... (${periodDays}日分)`);
       
-      // タイムアウト付きfetch
+      // タイムアウト付きfetch（60秒に延長）
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30秒タイムアウト
+      const timeoutId = setTimeout(() => controller.abort(), 60000); // 60秒タイムアウト
       
       const response = await fetch(`${this.baseUrl}/chat/completions`, {
         method: 'POST',
@@ -218,7 +233,7 @@ class SecureAiService {
             }
           ],
           temperature: 0.3,  // より一貫性のある応答
-          max_tokens: 2000,  // トークン数を制限
+          max_tokens: 4000,  // より多くのトークン数
           response_format: { type: "json_object" }  // JSON形式を強制
         }),
         signal: controller.signal
@@ -260,6 +275,81 @@ class SecureAiService {
     }
   }
 
+  private async generateMealsWithBatching(
+    userProfile: UserHealthProfile,
+    periodDays: number,
+    servings: number,
+    startDate?: Date
+  ): Promise<{[key: string]: GeneratedMeal[]}> {
+    console.log(`📦 分割生成開始: ${periodDays}日分を複数回に分けて生成`);
+    
+    const batchSize = 3; // 1回あたり3日分
+    const batches = Math.ceil(periodDays / batchSize);
+    const allMeals: {[key: string]: GeneratedMeal[]} = {};
+    const baseDate = startDate || new Date();
+
+    for (let i = 0; i < batches; i++) {
+      const startDay = i * batchSize;
+      const remainingDays = periodDays - startDay;
+      const currentBatchSize = Math.min(batchSize, remainingDays);
+      
+      const batchStartDate = new Date(baseDate);
+      batchStartDate.setDate(baseDate.getDate() + startDay);
+      
+      console.log(`🔄 バッチ ${i + 1}/${batches}: ${currentBatchSize}日分生成中...`);
+      
+      try {
+        // 少し間隔を空けてAPI呼び出し（レート制限回避）
+        if (i > 0) {
+          console.log('⏳ API呼び出し間隔調整中...');
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2秒待機
+        }
+        
+        const batchMeals = await this.generateSingleBatch(
+          userProfile, 
+          currentBatchSize, 
+          servings, 
+          batchStartDate
+        );
+        
+        // 結果をマージ
+        Object.assign(allMeals, batchMeals);
+        console.log(`✅ バッチ ${i + 1} 完了: ${Object.keys(batchMeals).length}日分追加`);
+        
+      } catch (error) {
+        console.warn(`❌ バッチ ${i + 1} 失敗:`, error);
+        
+        // 失敗した分はローカルエンジンで補完
+        console.log(`🏠 バッチ ${i + 1} をローカルエンジンで補完中...`);
+        try {
+          const localMealEngine = require('./localMealEngine').default;
+          const fallbackMeals = await localMealEngine.generatePersonalizedMeals(
+            userProfile,
+            currentBatchSize,
+            servings,
+            batchStartDate
+          );
+          
+          Object.assign(allMeals, fallbackMeals);
+          console.log(`✅ バッチ ${i + 1} ローカル補完完了`);
+          
+        } catch (localError) {
+          console.error(`❌ バッチ ${i + 1} ローカル補完も失敗:`, localError);
+          // このバッチはスキップして次へ
+        }
+      }
+    }
+    
+    const finalDayCount = Object.keys(allMeals).length;
+    console.log(`🎯 分割生成完了: ${finalDayCount}日分の献立を生成 (要求: ${periodDays}日分)`);
+    
+    if (finalDayCount === 0) {
+      throw new Error('すべてのバッチ生成に失敗しました');
+    }
+    
+    return allMeals;
+  }
+
   private parseAIResponse(
     aiResponse: string, 
     periodDays: number, 
@@ -267,28 +357,86 @@ class SecureAiService {
     startDate?: Date
   ): {[key: string]: GeneratedMeal[]} {
     try {
-      console.log('ChatGPT 生レスポンス（最初の500文字）:', aiResponse.substring(0, 500));
+      console.log('📥 ChatGPT レスポンス全体（デバッグ用）:');
+      console.log('レスポンス長:', aiResponse.length);
+      console.log('先頭500文字:', aiResponse.substring(0, 500));
+      console.log('末尾200文字:', aiResponse.substring(aiResponse.length - 200));
       
       // より柔軟なJSON抽出
       let jsonData: any;
       
-      // 方法1: 直接JSON解析を試行
+      // より柔軟なJSON修復とパース
       try {
         jsonData = JSON.parse(aiResponse);
+        console.log('✅ 直接JSON解析成功');
       } catch (directParseError) {
-        console.log('直接解析失敗、JSON抽出を試行...');
+        console.log('直接解析失敗、JSON修復を試行...');
         
-        // 方法2: JSON部分を抽出
-        const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          try {
-            jsonData = JSON.parse(jsonMatch[0]);
-          } catch (extractParseError) {
-            console.log('抽出解析失敗、代替形式を試行...');
-            throw new Error('JSON解析に失敗しました');
+        // 不完全なJSONを修復
+        let fixedJson = aiResponse.trim();
+        
+        // 1. 最後の不完全な文字列や部分的なオブジェクトを削除
+        // 完全な }] } パターンを探す
+        const completePattern = /\}\s*\]\s*\}\s*$/;
+        if (!completePattern.test(fixedJson)) {
+          console.log('不完全なJSON検出、修復中...');
+          
+          // 最後の完全な dinner オブジェクトまでを探す
+          const lastDinnerIndex = fixedJson.lastIndexOf('"dinner"');
+          if (lastDinnerIndex > 0) {
+            // dinner オブジェクトの後の完全な } を探す
+            let searchStart = lastDinnerIndex;
+            let braceCount = 0;
+            let endIndex = -1;
+            
+            for (let i = searchStart; i < fixedJson.length; i++) {
+              if (fixedJson[i] === '{') braceCount++;
+              if (fixedJson[i] === '}') {
+                braceCount--;
+                if (braceCount === 0) {
+                  endIndex = i + 1;
+                  break;
+                }
+              }
+            }
+            
+            if (endIndex > 0) {
+              fixedJson = fixedJson.substring(0, endIndex) + ']}';
+              console.log('JSON修復完了:', fixedJson.length, '文字');
+            }
           }
-        } else {
-          throw new Error('JSONデータが見つかりません');
+        }
+        
+        // 2. 修復されたJSONをパース
+        try {
+          jsonData = JSON.parse(fixedJson);
+          console.log('✅ JSON修復成功');
+        } catch (fixParseError) {
+          console.log('修復解析失敗、正規表現抽出を試行...');
+          
+          // 3. より強力な正規表現でJSON部分を抽出
+          const jsonMatch = fixedJson.match(/\{[\s\S]*"meals"[\s\S]*\]/);
+          if (jsonMatch) {
+            // 不完全な部分を修正してから閉じ括弧を追加
+            let extractedJson = jsonMatch[0];
+            if (!extractedJson.includes('"meals":[')) {
+              extractedJson = extractedJson.replace('"meals":', '"meals":[') + ']}';
+            } else {
+              if (!extractedJson.endsWith('}')) {
+                extractedJson += '}';
+              }
+            }
+            
+            try {
+              jsonData = JSON.parse(extractedJson);
+              console.log('✅ 正規表現抽出成功');
+            } catch (regexParseError) {
+              console.error('全ての解析方法が失敗:', regexParseError);
+              throw new Error('JSON解析に失敗しました');
+            }
+          } else {
+            throw new Error('JSONデータが見つかりません');
+          }
         }
       }
 

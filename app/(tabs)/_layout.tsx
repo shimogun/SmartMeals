@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { Ionicons } from '@expo/vector-icons';
 import { Link, Tabs } from 'expo-router';
-import { Pressable } from 'react-native';
+import { Pressable, TouchableOpacity, Alert } from 'react-native';
+import SettingsScreen from '../../components/SettingsScreen';
 
 import Colors from '@/constants/Colors';
 import { useColorScheme } from '@/components/useColorScheme';
@@ -15,10 +17,28 @@ function TabBarIcon(props: {
   return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
 }
 
+// 設定ボタンコンポーネント
+function SettingsButton({ onPress }: { onPress: () => void }) {
+  return (
+    <TouchableOpacity 
+      onPress={onPress}
+      style={{ paddingRight: 15 }}
+    >
+      <Ionicons name="settings-outline" size={22} color="#fff" />
+    </TouchableOpacity>
+  );
+}
+
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const [showSettings, setShowSettings] = useState(false);
+
+  const handleSettingsPress = () => {
+    setShowSettings(true);
+  };
 
   return (
+    <>
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
@@ -31,6 +51,7 @@ export default function TabLayout() {
         options={{
           title: 'ユーザー',
           tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
         }}
       />
       <Tabs.Screen
@@ -38,6 +59,7 @@ export default function TabLayout() {
         options={{
           title: '献立',
           tabBarIcon: ({ color }) => <TabBarIcon name="cutlery" color={color} />,
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
         }}
       />
       <Tabs.Screen
@@ -45,8 +67,15 @@ export default function TabLayout() {
         options={{
           title: '経過',
           tabBarIcon: ({ color }) => <TabBarIcon name="line-chart" color={color} />,
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
         }}
       />
     </Tabs>
+
+    <SettingsScreen 
+      visible={showSettings}
+      onClose={() => setShowSettings(false)}
+    />
+    </>
   );
 }

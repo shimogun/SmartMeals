@@ -15,6 +15,11 @@ export interface UserHealthProfile {
   dietRestriction?: 'strict' | 'normal' | 'relaxed';
   currentGlucose?: number;
   mealType?: string;
+  
+  // 食材選択データ（複数選択対応）
+  preferredMainCourses?: string[];
+  preferredMainIngredients?: string[];
+  preferredSideIngredients?: string[];
 }
 
 export interface GeneratedMeal {
@@ -503,6 +508,38 @@ class LocalMealEngine {
     mealType: string
   ): string {
     let description = `${mealType}に最適化された血糖値管理メニュー。`;
+
+    // 食材選択に基づく説明を追加（複数選択対応）
+    if (profile.preferredMainCourses && profile.preferredMainCourses.length > 0) {
+      const mainCoursesText = profile.preferredMainCourses.join('、');
+      if (profile.preferredMainCourses.some(course => course.includes('玄米') || course.includes('雑穀'))) {
+        description += "選択された低GI主食で血糖値上昇を緩やかにします。";
+      } else if (profile.preferredMainCourses.some(course => course.includes('なし'))) {
+        description += "主食なしの糖質制限スタイルでケトジェニック効果を重視します。";
+      } else if (profile.preferredMainCourses.some(course => course.includes('オートミール'))) {
+        description += "水溶性食物繊維豊富なオートミールで満腹感と血糖値安定を両立。";
+      }
+    }
+
+    if (profile.preferredMainIngredients && profile.preferredMainIngredients.length > 0) {
+      if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('鶏むね肉') || ingredient.includes('ささみ'))) {
+        description += "高タンパク・低脂肪の鶏肉で筋肉維持をサポート。";
+      } else if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('鮭') || ingredient.includes('サバ'))) {
+        description += "オメガ3脂肪酸豊富な魚で心血管の健康もケア。";
+      } else if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('豆腐'))) {
+        description += "植物性タンパク質で消化に優しく血糖値に影響を与えません。";
+      }
+    }
+
+    if (profile.preferredSideIngredients && profile.preferredSideIngredients.length > 0) {
+      if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('ブロッコリー') || ingredient.includes('ほうれん草'))) {
+        description += "緑黄色野菜で抗酸化作用とミネラル補給。";
+      } else if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('きのこ'))) {
+        description += "きのこ類の食物繊維で血糖値上昇抑制効果を期待。";
+      } else if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('わかめ') || ingredient.includes('ひじき'))) {
+        description += "海藻のミネラルと水溶性食物繊維で代謝をサポート。";
+      }
+    }
 
     // 個人の状況に応じた説明を追加
     if (profile.currentGlucose && profile.currentGlucose > 140) {

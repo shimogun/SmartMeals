@@ -12,6 +12,9 @@ export interface UserHealthProfile {
   dietRestriction?: 'strict' | 'normal' | 'relaxed';
   currentGlucose?: number;
   mealType?: string;
+  preferredMainCourses?: string[];
+  preferredMainIngredients?: string[];
+  preferredSideIngredients?: string[];
 }
 
 export interface GeneratedMeal {
@@ -72,6 +75,18 @@ class SecureAiService {
     periodDays: number,
     servings: number
   ): string {
+    // 食材選択に基づく要望を構築（複数選択対応）
+    let foodPreferences = '';
+    if (userProfile.preferredMainCourses && userProfile.preferredMainCourses.length > 0) {
+      foodPreferences += `\n- 希望する主食: ${userProfile.preferredMainCourses.join('、')}`;
+    }
+    if (userProfile.preferredMainIngredients && userProfile.preferredMainIngredients.length > 0) {
+      foodPreferences += `\n- 希望する主菜食材: ${userProfile.preferredMainIngredients.join('、')}`;
+    }
+    if (userProfile.preferredSideIngredients && userProfile.preferredSideIngredients.length > 0) {
+      foodPreferences += `\n- 希望する副菜食材: ${userProfile.preferredSideIngredients.join('、')}`;
+    }
+
     return `糖尿病専門栄養士として、${periodDays}日間の具体的な献立メニューを作成してください。
 
 患者情報:
@@ -82,11 +97,14 @@ class SecureAiService {
 - 体調: ${userProfile.currentCondition || '普通'}
 - 食事制限: ${userProfile.dietRestriction || '普通'}
 
+食材の好み:${foodPreferences || '\n- 特に指定なし'}
+
 要件:
 - ${periodDays}日分の具体的で実用的な献立
 - 各日異なる料理名（例：鶏胸肉のオムレツ、鮭のムニエル、豆腐ハンバーグなど）
 - 日本の一般家庭で作れる料理
 - 糖尿病患者に適した栄養バランス
+- 可能な限り患者の食材の好みを反映した献立
 
 以下の形式でJSONのみ返してください：
 

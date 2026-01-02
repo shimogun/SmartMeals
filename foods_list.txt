@@ -1,0 +1,300 @@
+meal-0000|grilled herb chicken breast with steamed broccoli
+meal-0001|grilled herb chicken breast with shredded cabbage
+meal-0002|grilled herb chicken breast with spinach sesame salad
+meal-0003|grilled herb chicken breast with hijiki seaweed salad
+meal-0004|grilled herb chicken breast with cherry tomatoes
+meal-0005|grilled herb chicken breast with grilled asparagus
+meal-0006|grilled herb chicken breast with mashed pumpkin
+meal-0007|grilled herb chicken breast with pickled cucumber
+meal-0008|grilled herb chicken breast with sauteed mushrooms
+meal-0009|grilled herb chicken breast with snap peas with salt
+meal-0010|grilled herb chicken breast with sweet corn
+meal-0011|grilled herb chicken breast with roasted cauliflower
+meal-0012|grilled herb chicken breast with kinpira burdock root
+meal-0013|steamed chicken breast with steamed broccoli
+meal-0014|steamed chicken breast with shredded cabbage
+meal-0015|steamed chicken breast with spinach sesame salad
+meal-0016|steamed chicken breast with hijiki seaweed salad
+meal-0017|steamed chicken breast with cherry tomatoes
+meal-0018|steamed chicken breast with grilled asparagus
+meal-0019|steamed chicken breast with mashed pumpkin
+meal-0020|steamed chicken breast with pickled cucumber
+meal-0021|steamed chicken breast with sauteed mushrooms
+meal-0022|steamed chicken breast with snap peas with salt
+meal-0023|steamed chicken breast with sweet corn
+meal-0024|steamed chicken breast with roasted cauliflower
+meal-0025|steamed chicken breast with kinpira burdock root
+meal-0026|stir-fry chicken breast with steamed broccoli
+meal-0027|stir-fry chicken breast with shredded cabbage
+meal-0028|stir-fry chicken breast with spinach sesame salad
+meal-0029|stir-fry chicken breast with hijiki seaweed salad
+meal-0030|stir-fry chicken breast with cherry tomatoes
+meal-0031|stir-fry chicken breast with grilled asparagus
+meal-0032|stir-fry chicken breast with mashed pumpkin
+meal-0033|stir-fry chicken breast with pickled cucumber
+meal-0034|stir-fry chicken breast with sauteed mushrooms
+meal-0035|stir-fry chicken breast with snap peas with salt
+meal-0036|stir-fry chicken breast with sweet corn
+meal-0037|stir-fry chicken breast with roasted cauliflower
+meal-0038|stir-fry chicken breast with kinpira burdock root
+meal-0039|honey mustard chicken breast with steamed broccoli
+meal-0040|honey mustard chicken breast with shredded cabbage
+meal-0041|honey mustard chicken breast with spinach sesame salad
+meal-0042|honey mustard chicken breast with hijiki seaweed salad
+meal-0043|honey mustard chicken breast with cherry tomatoes
+meal-0044|honey mustard chicken breast with grilled asparagus
+meal-0045|honey mustard chicken breast with mashed pumpkin
+meal-0046|honey mustard chicken breast with pickled cucumber
+meal-0047|honey mustard chicken breast with sauteed mushrooms
+meal-0048|honey mustard chicken breast with snap peas with salt
+meal-0049|honey mustard chicken breast with sweet corn
+meal-0050|honey mustard chicken breast with roasted cauliflower
+meal-0051|honey mustard chicken breast with kinpira burdock root
+meal-0052|salt-grilled salmon fillet with steamed broccoli
+meal-0053|salt-grilled salmon fillet with shredded cabbage
+meal-0054|salt-grilled salmon fillet with spinach sesame salad
+meal-0055|salt-grilled salmon fillet with hijiki seaweed salad
+meal-0056|salt-grilled salmon fillet with cherry tomatoes
+meal-0057|salt-grilled salmon fillet with grilled asparagus
+meal-0058|salt-grilled salmon fillet with mashed pumpkin
+meal-0059|salt-grilled salmon fillet with pickled cucumber
+meal-0060|salt-grilled salmon fillet with sauteed mushrooms
+meal-0061|salt-grilled salmon fillet with snap peas with salt
+meal-0062|salt-grilled salmon fillet with sweet corn
+meal-0063|salt-grilled salmon fillet with roasted cauliflower
+meal-0064|salt-grilled salmon fillet with kinpira burdock root
+meal-0065|meuniere salmon fillet with steamed broccoli
+meal-0066|meuniere salmon fillet with shredded cabbage
+meal-0067|meuniere salmon fillet with spinach sesame salad
+meal-0068|meuniere salmon fillet with hijiki seaweed salad
+meal-0069|meuniere salmon fillet with cherry tomatoes
+meal-0070|meuniere salmon fillet with grilled asparagus
+meal-0071|meuniere salmon fillet with mashed pumpkin
+meal-0072|meuniere salmon fillet with pickled cucumber
+meal-0073|meuniere salmon fillet with sauteed mushrooms
+meal-0074|meuniere salmon fillet with snap peas with salt
+meal-0075|meuniere salmon fillet with sweet corn
+meal-0076|meuniere salmon fillet with roasted cauliflower
+meal-0077|meuniere salmon fillet with kinpira burdock root
+meal-0078|teriyaki salmon fillet with steamed broccoli
+meal-0079|teriyaki salmon fillet with shredded cabbage
+meal-0080|teriyaki salmon fillet with spinach sesame salad
+meal-0081|teriyaki salmon fillet with hijiki seaweed salad
+meal-0082|teriyaki salmon fillet with cherry tomatoes
+meal-0083|teriyaki salmon fillet with grilled asparagus
+meal-0084|teriyaki salmon fillet with mashed pumpkin
+meal-0085|teriyaki salmon fillet with pickled cucumber
+meal-0086|teriyaki salmon fillet with sauteed mushrooms
+meal-0087|teriyaki salmon fillet with snap peas with salt
+meal-0088|teriyaki salmon fillet with sweet corn
+meal-0089|teriyaki salmon fillet with roasted cauliflower
+meal-0090|teriyaki salmon fillet with kinpira burdock root
+meal-0091|lemon poached salmon fillet with steamed broccoli
+meal-0092|lemon poached salmon fillet with shredded cabbage
+meal-0093|lemon poached salmon fillet with spinach sesame salad
+meal-0094|lemon poached salmon fillet with hijiki seaweed salad
+meal-0095|lemon poached salmon fillet with cherry tomatoes
+meal-0096|lemon poached salmon fillet with grilled asparagus
+meal-0097|lemon poached salmon fillet with mashed pumpkin
+meal-0098|lemon poached salmon fillet with pickled cucumber
+meal-0099|lemon poached salmon fillet with sauteed mushrooms
+meal-0100|lemon poached salmon fillet with snap peas with salt
+meal-0101|lemon poached salmon fillet with sweet corn
+meal-0102|lemon poached salmon fillet with roasted cauliflower
+meal-0103|lemon poached salmon fillet with kinpira burdock root
+meal-0104|ginger soy pork tenderloin with steamed broccoli
+meal-0105|ginger soy pork tenderloin with shredded cabbage
+meal-0106|ginger soy pork tenderloin with spinach sesame salad
+meal-0107|ginger soy pork tenderloin with hijiki seaweed salad
+meal-0108|ginger soy pork tenderloin with cherry tomatoes
+meal-0109|ginger soy pork tenderloin with grilled asparagus
+meal-0110|ginger soy pork tenderloin with mashed pumpkin
+meal-0111|ginger soy pork tenderloin with pickled cucumber
+meal-0112|ginger soy pork tenderloin with sauteed mushrooms
+meal-0113|ginger soy pork tenderloin with snap peas with salt
+meal-0114|ginger soy pork tenderloin with sweet corn
+meal-0115|ginger soy pork tenderloin with roasted cauliflower
+meal-0116|ginger soy pork tenderloin with kinpira burdock root
+meal-0117|shabu-shabu style pork tenderloin with steamed broccoli
+meal-0118|shabu-shabu style pork tenderloin with shredded cabbage
+meal-0119|shabu-shabu style pork tenderloin with spinach sesame salad
+meal-0120|shabu-shabu style pork tenderloin with hijiki seaweed salad
+meal-0121|shabu-shabu style pork tenderloin with cherry tomatoes
+meal-0122|shabu-shabu style pork tenderloin with grilled asparagus
+meal-0123|shabu-shabu style pork tenderloin with mashed pumpkin
+meal-0124|shabu-shabu style pork tenderloin with pickled cucumber
+meal-0125|shabu-shabu style pork tenderloin with sauteed mushrooms
+meal-0126|shabu-shabu style pork tenderloin with snap peas with salt
+meal-0127|shabu-shabu style pork tenderloin with sweet corn
+meal-0128|shabu-shabu style pork tenderloin with roasted cauliflower
+meal-0129|shabu-shabu style pork tenderloin with kinpira burdock root
+meal-0130|garlic roast pork tenderloin with steamed broccoli
+meal-0131|garlic roast pork tenderloin with shredded cabbage
+meal-0132|garlic roast pork tenderloin with spinach sesame salad
+meal-0133|garlic roast pork tenderloin with hijiki seaweed salad
+meal-0134|garlic roast pork tenderloin with cherry tomatoes
+meal-0135|garlic roast pork tenderloin with grilled asparagus
+meal-0136|garlic roast pork tenderloin with mashed pumpkin
+meal-0137|garlic roast pork tenderloin with pickled cucumber
+meal-0138|garlic roast pork tenderloin with sauteed mushrooms
+meal-0139|garlic roast pork tenderloin with snap peas with salt
+meal-0140|garlic roast pork tenderloin with sweet corn
+meal-0141|garlic roast pork tenderloin with roasted cauliflower
+meal-0142|garlic roast pork tenderloin with kinpira burdock root
+meal-0143|salt-grilled mackerel with steamed broccoli
+meal-0144|salt-grilled mackerel with shredded cabbage
+meal-0145|salt-grilled mackerel with spinach sesame salad
+meal-0146|salt-grilled mackerel with hijiki seaweed salad
+meal-0147|salt-grilled mackerel with cherry tomatoes
+meal-0148|salt-grilled mackerel with grilled asparagus
+meal-0149|salt-grilled mackerel with mashed pumpkin
+meal-0150|salt-grilled mackerel with pickled cucumber
+meal-0151|salt-grilled mackerel with sauteed mushrooms
+meal-0152|salt-grilled mackerel with snap peas with salt
+meal-0153|salt-grilled mackerel with sweet corn
+meal-0154|salt-grilled mackerel with roasted cauliflower
+meal-0155|salt-grilled mackerel with kinpira burdock root
+meal-0156|miso-simmered mackerel with steamed broccoli
+meal-0157|miso-simmered mackerel with shredded cabbage
+meal-0158|miso-simmered mackerel with spinach sesame salad
+meal-0159|miso-simmered mackerel with hijiki seaweed salad
+meal-0160|miso-simmered mackerel with cherry tomatoes
+meal-0161|miso-simmered mackerel with grilled asparagus
+meal-0162|miso-simmered mackerel with mashed pumpkin
+meal-0163|miso-simmered mackerel with pickled cucumber
+meal-0164|miso-simmered mackerel with sauteed mushrooms
+meal-0165|miso-simmered mackerel with snap peas with salt
+meal-0166|miso-simmered mackerel with sweet corn
+meal-0167|miso-simmered mackerel with roasted cauliflower
+meal-0168|miso-simmered mackerel with kinpira burdock root
+meal-0169|curry flavored mackerel with steamed broccoli
+meal-0170|curry flavored mackerel with shredded cabbage
+meal-0171|curry flavored mackerel with spinach sesame salad
+meal-0172|curry flavored mackerel with hijiki seaweed salad
+meal-0173|curry flavored mackerel with cherry tomatoes
+meal-0174|curry flavored mackerel with grilled asparagus
+meal-0175|curry flavored mackerel with mashed pumpkin
+meal-0176|curry flavored mackerel with pickled cucumber
+meal-0177|curry flavored mackerel with sauteed mushrooms
+meal-0178|curry flavored mackerel with snap peas with salt
+meal-0179|curry flavored mackerel with sweet corn
+meal-0180|curry flavored mackerel with roasted cauliflower
+meal-0181|curry flavored mackerel with kinpira burdock root
+meal-0182|mapo style tofu with steamed broccoli
+meal-0183|mapo style tofu with shredded cabbage
+meal-0184|mapo style tofu with spinach sesame salad
+meal-0185|mapo style tofu with hijiki seaweed salad
+meal-0186|mapo style tofu with cherry tomatoes
+meal-0187|mapo style tofu with grilled asparagus
+meal-0188|mapo style tofu with mashed pumpkin
+meal-0189|mapo style tofu with pickled cucumber
+meal-0190|mapo style tofu with sauteed mushrooms
+meal-0191|mapo style tofu with snap peas with salt
+meal-0192|mapo style tofu with sweet corn
+meal-0193|mapo style tofu with roasted cauliflower
+meal-0194|mapo style tofu with kinpira burdock root
+meal-0195|steak with mushrooms tofu with steamed broccoli
+meal-0196|steak with mushrooms tofu with shredded cabbage
+meal-0197|steak with mushrooms tofu with spinach sesame salad
+meal-0198|steak with mushrooms tofu with hijiki seaweed salad
+meal-0199|steak with mushrooms tofu with cherry tomatoes
+meal-0200|steak with mushrooms tofu with grilled asparagus
+meal-0201|steak with mushrooms tofu with mashed pumpkin
+meal-0202|steak with mushrooms tofu with pickled cucumber
+meal-0203|steak with mushrooms tofu with sauteed mushrooms
+meal-0204|steak with mushrooms tofu with snap peas with salt
+meal-0205|steak with mushrooms tofu with sweet corn
+meal-0206|steak with mushrooms tofu with roasted cauliflower
+meal-0207|steak with mushrooms tofu with kinpira burdock root
+meal-0208|hiyayakko style tofu with steamed broccoli
+meal-0209|hiyayakko style tofu with shredded cabbage
+meal-0210|hiyayakko style tofu with spinach sesame salad
+meal-0211|hiyayakko style tofu with hijiki seaweed salad
+meal-0212|hiyayakko style tofu with cherry tomatoes
+meal-0213|hiyayakko style tofu with grilled asparagus
+meal-0214|hiyayakko style tofu with mashed pumpkin
+meal-0215|hiyayakko style tofu with pickled cucumber
+meal-0216|hiyayakko style tofu with sauteed mushrooms
+meal-0217|hiyayakko style tofu with snap peas with salt
+meal-0218|hiyayakko style tofu with sweet corn
+meal-0219|hiyayakko style tofu with roasted cauliflower
+meal-0220|hiyayakko style tofu with kinpira burdock root
+meal-0221|boiled with soy white fish with steamed broccoli
+meal-0222|boiled with soy white fish with shredded cabbage
+meal-0223|boiled with soy white fish with spinach sesame salad
+meal-0224|boiled with soy white fish with hijiki seaweed salad
+meal-0225|boiled with soy white fish with cherry tomatoes
+meal-0226|boiled with soy white fish with grilled asparagus
+meal-0227|boiled with soy white fish with mashed pumpkin
+meal-0228|boiled with soy white fish with pickled cucumber
+meal-0229|boiled with soy white fish with sauteed mushrooms
+meal-0230|boiled with soy white fish with snap peas with salt
+meal-0231|boiled with soy white fish with sweet corn
+meal-0232|boiled with soy white fish with roasted cauliflower
+meal-0233|boiled with soy white fish with kinpira burdock root
+meal-0234|steamed with lemon white fish with steamed broccoli
+meal-0235|steamed with lemon white fish with shredded cabbage
+meal-0236|steamed with lemon white fish with spinach sesame salad
+meal-0237|steamed with lemon white fish with hijiki seaweed salad
+meal-0238|steamed with lemon white fish with cherry tomatoes
+meal-0239|steamed with lemon white fish with grilled asparagus
+meal-0240|steamed with lemon white fish with mashed pumpkin
+meal-0241|steamed with lemon white fish with pickled cucumber
+meal-0242|steamed with lemon white fish with sauteed mushrooms
+meal-0243|steamed with lemon white fish with snap peas with salt
+meal-0244|steamed with lemon white fish with sweet corn
+meal-0245|steamed with lemon white fish with roasted cauliflower
+meal-0246|steamed with lemon white fish with kinpira burdock root
+meal-0247|pan-seared white fish with steamed broccoli
+meal-0248|pan-seared white fish with shredded cabbage
+meal-0249|pan-seared white fish with spinach sesame salad
+meal-0250|pan-seared white fish with hijiki seaweed salad
+meal-0251|pan-seared white fish with cherry tomatoes
+meal-0252|pan-seared white fish with grilled asparagus
+meal-0253|pan-seared white fish with mashed pumpkin
+meal-0254|pan-seared white fish with pickled cucumber
+meal-0255|pan-seared white fish with sauteed mushrooms
+meal-0256|pan-seared white fish with snap peas with salt
+meal-0257|pan-seared white fish with sweet corn
+meal-0258|pan-seared white fish with roasted cauliflower
+meal-0259|pan-seared white fish with kinpira burdock root
+meal-0260|steak beef lean cut with steamed broccoli
+meal-0261|steak beef lean cut with shredded cabbage
+meal-0262|steak beef lean cut with spinach sesame salad
+meal-0263|steak beef lean cut with hijiki seaweed salad
+meal-0264|steak beef lean cut with cherry tomatoes
+meal-0265|steak beef lean cut with grilled asparagus
+meal-0266|steak beef lean cut with mashed pumpkin
+meal-0267|steak beef lean cut with pickled cucumber
+meal-0268|steak beef lean cut with sauteed mushrooms
+meal-0269|steak beef lean cut with snap peas with salt
+meal-0270|steak beef lean cut with sweet corn
+meal-0271|steak beef lean cut with roasted cauliflower
+meal-0272|steak beef lean cut with kinpira burdock root
+meal-0273|shabu-shabu beef lean cut with steamed broccoli
+meal-0274|shabu-shabu beef lean cut with shredded cabbage
+meal-0275|shabu-shabu beef lean cut with spinach sesame salad
+meal-0276|shabu-shabu beef lean cut with hijiki seaweed salad
+meal-0277|shabu-shabu beef lean cut with cherry tomatoes
+meal-0278|shabu-shabu beef lean cut with grilled asparagus
+meal-0279|shabu-shabu beef lean cut with mashed pumpkin
+meal-0280|shabu-shabu beef lean cut with pickled cucumber
+meal-0281|shabu-shabu beef lean cut with sauteed mushrooms
+meal-0282|shabu-shabu beef lean cut with snap peas with salt
+meal-0283|shabu-shabu beef lean cut with sweet corn
+meal-0284|shabu-shabu beef lean cut with roasted cauliflower
+meal-0285|shabu-shabu beef lean cut with kinpira burdock root
+meal-0286|red wine braised beef lean cut with steamed broccoli
+meal-0287|red wine braised beef lean cut with shredded cabbage
+meal-0288|red wine braised beef lean cut with spinach sesame salad
+meal-0289|red wine braised beef lean cut with hijiki seaweed salad
+meal-0290|red wine braised beef lean cut with cherry tomatoes
+meal-0291|red wine braised beef lean cut with grilled asparagus
+meal-0292|red wine braised beef lean cut with mashed pumpkin
+meal-0293|red wine braised beef lean cut with pickled cucumber
+meal-0294|red wine braised beef lean cut with sauteed mushrooms
+meal-0295|red wine braised beef lean cut with snap peas with salt
+meal-0296|red wine braised beef lean cut with sweet corn
+meal-0297|red wine braised beef lean cut with roasted cauliflower
+meal-0298|red wine braised beef lean cut with kinpira burdock root
+meal-0299|garlic sauteed shrimp with steamed broccoli

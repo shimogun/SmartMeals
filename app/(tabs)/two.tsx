@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import secureAiService, { UserHealthProfile } from '../../services/secureAiService';
 import localMealEngine from '../../services/localMealEngine';
+import HybridMealImage from '../../components/HybridMealImage';
 
 // 型定義
 interface GlucoseRecord {
@@ -67,6 +68,7 @@ export default function TwoScreen() {
   const [currentCondition, setCurrentCondition] = useState<'good' | 'normal' | 'poor'>('normal');
   const [dietRestriction, setDietRestriction] = useState<'strict' | 'normal' | 'relaxed'>('normal');
   const [showMealModal, setShowMealModal] = useState(false);
+  const [selectedMealDetail, setSelectedMealDetail] = useState<GeneratedMeal | null>(null);
   
   // 献立生成関連
   const [isGenerating, setIsGenerating] = useState(false);
@@ -109,6 +111,7 @@ export default function TwoScreen() {
       setList([...currentList, item]);
     }
   };
+
 
   // スワイプ処理
   const panResponder = PanResponder.create({
@@ -469,15 +472,109 @@ export default function TwoScreen() {
   );
 
   // ステップ3: 献立表示
-  const renderStep3 = () => (
-    <View style={styles.stepContainer}>
-      <Text style={styles.sectionTitle}>AI献立提案</Text>
-      
-      <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
-        <View style={styles.suggestionsContainer}>
+  const renderStep3 = () => {
+    // 詳細表示の場合
+    if (selectedMealDetail) {
+      return (
+        <View style={styles.stepContainer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+            <TouchableOpacity 
+              onPress={() => setSelectedMealDetail(null)}
+              style={{ padding: 8, marginRight: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color="#007AFF" />
+            </TouchableOpacity>
+            <Text style={styles.sectionTitle}>{selectedMealDetail.name}</Text>
+          </View>
+          
+          <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
+            {/* 料理画像 */}
+            <View style={{ alignItems: 'center', marginBottom: 20 }}>
+              <HybridMealImage 
+                mealId={selectedMealDetail.id} 
+                mealName={selectedMealDetail.name}
+                width={250} 
+                height={250}
+                showLoadingText={true}
+              />
+            </View>
+
+            {/* 栄養情報 */}
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>📊 栄養情報</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' }}>
+                <View style={{ width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12, marginBottom: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>カロリー</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#007AFF' }}>{selectedMealDetail.calories}</Text>
+                  <Text style={{ fontSize: 12, color: '#666' }}>kcal</Text>
+                </View>
+                <View style={{ width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12, marginBottom: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>糖質</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#FF6B35' }}>{selectedMealDetail.carbs}</Text>
+                  <Text style={{ fontSize: 12, color: '#666' }}>g</Text>
+                </View>
+                <View style={{ width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12, marginBottom: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>タンパク質</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#4CAF50' }}>{selectedMealDetail.protein}</Text>
+                  <Text style={{ fontSize: 12, color: '#666' }}>g</Text>
+                </View>
+                <View style={{ width: '48%', backgroundColor: '#f8f9fa', borderRadius: 8, padding: 12, marginBottom: 10, alignItems: 'center' }}>
+                  <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>脂質</Text>
+                  <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#FF9800' }}>{selectedMealDetail.fat}</Text>
+                  <Text style={{ fontSize: 12, color: '#666' }}>g</Text>
+                </View>
+              </View>
+              <Text style={{ textAlign: 'center', fontSize: 14, color: '#666', marginTop: 10, fontStyle: 'italic' }}>
+                👥 {selectedMealDetail.servings}人分
+              </Text>
+            </View>
+
+            {/* 材料 */}
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>🥕 材料</Text>
+              {selectedMealDetail.ingredients.map((ingredient, index) => (
+                <View key={index} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8, paddingVertical: 4 }}>
+                  <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: '#007AFF', marginRight: 12 }} />
+                  <Text style={{ fontSize: 16, color: '#333', flex: 1 }}>{ingredient}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* 作り方 */}
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>👩‍🍳 作り方</Text>
+              {selectedMealDetail.recipe.map((step, index) => (
+                <View key={index} style={{ flexDirection: 'row', marginBottom: 12, alignItems: 'flex-start' }}>
+                  <View style={{ 
+                    width: 28, height: 28, borderRadius: 14, backgroundColor: '#007AFF', 
+                    justifyContent: 'center', alignItems: 'center', marginRight: 12, marginTop: 2 
+                  }}>
+                    <Text style={{ color: '#fff', fontSize: 14, fontWeight: 'bold' }}>{index + 1}</Text>
+                  </View>
+                  <Text style={{ fontSize: 16, color: '#333', flex: 1, lineHeight: 24 }}>{step}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* 特徴 */}
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>💡 特徴</Text>
+              <Text style={{ fontSize: 16, color: '#666', lineHeight: 24 }}>{selectedMealDetail.description}</Text>
+            </View>
+          </ScrollView>
+        </View>
+      );
+    }
+
+    // 献立一覧表示
+    return (
+      <View style={styles.stepContainer}>
+        <Text style={styles.sectionTitle}>AI献立提案</Text>
+        
+        <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
           {Object.entries(generatedMeals).map(([date, meals]) => (
-            <View key={date} style={styles.mealCard}>
-              <Text style={styles.mealCardDate}>
+            <View key={date} style={{ marginBottom: 20 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 15, textAlign: 'center' }}>
                 {new Date(date).toLocaleDateString('ja-JP', { 
                   month: 'long', 
                   day: 'numeric',
@@ -485,29 +582,64 @@ export default function TwoScreen() {
                 })}
               </Text>
               {meals.map((meal) => (
-                <View key={meal.id} style={styles.mealItem}>
-                  <Text style={styles.mealName}>{meal.name}</Text>
-                  <Text style={styles.mealDescription}>{meal.description}</Text>
-                  <View style={styles.nutritionInfo}>
-                    <Text style={styles.nutritionText}>カロリー: {meal.calories}kcal</Text>
-                    <Text style={styles.nutritionText}>糖質: {meal.carbs}g</Text>
-                    <Text style={styles.nutritionText}>タンパク質: {meal.protein}g</Text>
+                <TouchableOpacity 
+                  key={meal.id} 
+                  style={{ 
+                    backgroundColor: '#fff', 
+                    borderRadius: 12, 
+                    padding: 16, 
+                    marginBottom: 12, 
+                    elevation: 2,
+                    borderLeftWidth: 4,
+                    borderLeftColor: '#007AFF'
+                  }}
+                  onPress={() => setSelectedMealDetail(meal)}
+                  activeOpacity={0.7}
+                >
+                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
+                    {/* ハイブリッド画像表示 */}
+                    <HybridMealImage 
+                      mealId={meal.id} 
+                      mealName={meal.name}
+                      width={80} 
+                      height={80}
+                      showLoadingText={false}
+                      style={{ marginRight: 12 }}
+                    />
+                    <View style={{ flex: 1 }}>
+                      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 }}>{meal.name}</Text>
+                        <Ionicons name="chevron-forward" size={20} color="#007AFF" />
+                      </View>
+                      <Text style={{ fontSize: 14, color: '#666', marginBottom: 8, lineHeight: 20 }}>{meal.description}</Text>
+                    </View>
                   </View>
-                </View>
+                  <View style={{ flexDirection: 'row', justifyContent: 'space-around' }}>
+                    <Text style={{ fontSize: 12, color: '#007AFF', backgroundColor: '#f0f8ff', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      {meal.calories}kcal
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#FF6B35', backgroundColor: '#fff5f2', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      糖質{meal.carbs}g
+                    </Text>
+                    <Text style={{ fontSize: 12, color: '#4CAF50', backgroundColor: '#f8fff8', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 }}>
+                      タンパク質{meal.protein}g
+                    </Text>
+                  </View>
+                </TouchableOpacity>
               ))}
             </View>
           ))}
-        </View>
-        
-        <TouchableOpacity 
-          style={styles.recordButton} 
-          onPress={() => setCurrentStep(1)}
-        >
-          <Text style={styles.recordButtonText}>新しい献立を作成</Text>
-        </TouchableOpacity>
-      </ScrollView>
-    </View>
-  );
+          
+          <TouchableOpacity 
+            style={styles.recordButton} 
+            onPress={() => setCurrentStep(1)}
+          >
+            <Text style={styles.recordButtonText}>新しい献立を作成</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </View>
+    );
+  };
 
   // 現在のステップに応じて表示
   if (currentStep === 1) {
@@ -562,6 +694,7 @@ export default function TwoScreen() {
           </View>
         </View>
       </Modal>
+
     </View>
   );
 }
@@ -855,6 +988,7 @@ const styles = StyleSheet.create({
   // 献立表示
   suggestionsContainer: {
     paddingHorizontal: 20,
+    flex: 1,
   },
   mealCard: {
     backgroundColor: '#fff',
@@ -876,17 +1010,30 @@ const styles = StyleSheet.create({
     borderBottomColor: '#eee',
     paddingBottom: 10,
   },
-  mealItem: {
+  mealItemTouchable: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
     marginBottom: 15,
-    paddingBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  mealHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   mealName: {
     fontSize: 16,
     fontWeight: 'bold',
-    marginBottom: 8,
     color: '#333',
+    flex: 1,
   },
   mealDescription: {
     fontSize: 14,
@@ -911,7 +1058,8 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    zIndex: 9999,
   },
   modalContainer: {
     backgroundColor: '#fff',
@@ -959,5 +1107,124 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontSize: 16,
     fontWeight: '500',
+  },
+  // 献立詳細モーダル用スタイル
+  mealDetailModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    margin: 20,
+    maxHeight: '85%',
+    width: '90%',
+    maxWidth: 400,
+    zIndex: 10000,
+    elevation: 100,
+  },
+  mealDetailHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  mealDetailTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  closeButton: {
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: '#f8f9fa',
+  },
+  mealDetailScrollView: {
+    flex: 1,
+    padding: 20,
+  },
+  mealDetailSection: {
+    marginBottom: 25,
+  },
+  mealDetailSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 8,
+  },
+  nutritionGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  nutritionGridItem: {
+    width: '48%',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  nutritionGridLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 5,
+  },
+  nutritionGridValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  servingInfo: {
+    fontSize: 14,
+    color: '#666',
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
+  ingredientItem: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  ingredientBullet: {
+    fontSize: 16,
+    color: '#007AFF',
+    marginRight: 8,
+    marginTop: 2,
+  },
+  ingredientText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+    lineHeight: 20,
+  },
+  recipeStep: {
+    flexDirection: 'row',
+    marginBottom: 15,
+    alignItems: 'flex-start',
+  },
+  recipeStepNumber: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#007AFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 10,
+    marginTop: 2,
+  },
+  recipeStepText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  recipeStepDescription: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+    lineHeight: 20,
   },
 });

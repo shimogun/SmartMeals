@@ -60,21 +60,21 @@ class LocalMealEngine {
 
   private initializeMealTemplates(): void {
     this.mealTemplates = [
-      // 朝食メニュー
+      // 朝食メニュー（SmartMealsルール準拠：健康的調理法のみ）
       {
-        name: '鶏胸肉のオムレツ',
+        name: '鶏むね肉の蒸し焼き',
         baseCalories: 280,
         baseCarbs: 8,
         baseProtein: 28,
         baseFat: 15,
-        ingredients: ['鶏胸肉100g', '卵2個', 'ほうれん草50g', 'チーズ20g', 'オリーブオイル大さじ1'],
+        ingredients: ['鶏むね肉100g', 'ブロッコリー50g', '人参30g', 'ハーブソルト', 'レモン汁'],
         recipe: [
-          '鶏胸肉を小さく切り、塩胡椒で下味をつける',
-          'ほうれん草を茹でて水気を切る',
-          '卵を溶いて塩胡椒で味付け',
-          'フライパンで鶏胸肉を炒める',
-          '卵液を加えて半熟状態でほうれん草とチーズを乗せる',
-          '半分に折って完成'
+          '鶏むね肉を一口大に切り、ハーブソルトで下味をつける',
+          'ブロッコリーと人参を一口大に切る',
+          'アルミホイルに鶏肉と野菜を乗せる',
+          'レモン汁をかけて包む',
+          '200度のオーブンで20分蒸し焼きにする',
+          '器に盛り付けて完成'
         ],
         category: 'breakfast',
         diabeticFriendly: true,
@@ -83,18 +83,18 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
-        name: '鮭のムニエル',
+        name: '鮭の塩焼き',
         baseCalories: 290,
         baseCarbs: 5,
         baseProtein: 30,
         baseFat: 16,
-        ingredients: ['鮭切り身120g', 'レモン1/2個', 'バター10g', 'ほうれん草100g', '塩胡椒'],
+        ingredients: ['鮭切り身120g', 'レモン1/2個', 'ほうれん草100g', '塩', 'こしょう'],
         recipe: [
-          '鮭に塩胡椒で下味をつけて15分置く',
+          '鮭に塩こしょうで下味をつけて15分置く',
           'ほうれん草をさっと茹でる',
-          'フライパンでバターを溶かす',
-          '鮭を両面焼く',
-          'ほうれん草を付け合わせ、レモンを絞る'
+          'グリルまたはオーブンで鮭を両面焼く',
+          'ほうれん草を付け合わせる',
+          'レモンを絞って完成'
         ],
         category: 'breakfast',
         diabeticFriendly: true,

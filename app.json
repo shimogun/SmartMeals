@@ -31,6 +31,9 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "SPOONACULAR_API_KEY": "7552f5522faa451ba78e2a20cf39c6a6"
     }
   }
 }

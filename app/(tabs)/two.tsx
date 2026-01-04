@@ -9,7 +9,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import secureAiService, { UserHealthProfile } from '../../services/secureAiService';
 import localMealEngine from '../../services/localMealEngine';
-import HybridMealImage from '../../components/HybridMealImage';
 
 // 型定義
 interface GlucoseRecord {
@@ -79,15 +78,15 @@ export default function TwoScreen() {
 
   // 食材データ
   const mainCourses = [
-    '白米（基本の主食）',
-    '玄米（低GI・食物繊維）', 
-    '雑穀米 / 五穀米（ミネラル豊富）',
-    'もち麦ごはん（水溶性食物繊維）',
-    '全粒粉パン / ブランパン（低糖質パン）',
-    'オートミール（トレンド・低GI）',
-    'そば（低GI・ルチン含有）',
-    'こんにゃく米（超低糖質）',
-    '主食なし（糖質制限）'
+    '白米',
+    '玄米', 
+    '雑穀米 / 五穀米',
+    'もち麦ごはん',
+    '全粒粉パン / ブランパン',
+    'オートミール',
+    'そば',
+    'こんにゃく米',
+    '主食なし'
   ];
 
   const mainIngredients = {
@@ -488,16 +487,6 @@ export default function TwoScreen() {
           </View>
           
           <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
-            {/* 料理画像 */}
-            <View style={{ alignItems: 'center', marginBottom: 20 }}>
-              <HybridMealImage 
-                mealId={selectedMealDetail.id} 
-                mealName={selectedMealDetail.name}
-                width={250} 
-                height={250}
-                showLoadingText={true}
-              />
-            </View>
 
             {/* 栄養情報 */}
             <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
@@ -596,16 +585,7 @@ export default function TwoScreen() {
                   onPress={() => setSelectedMealDetail(meal)}
                   activeOpacity={0.7}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 }}>
-                    {/* ハイブリッド画像表示 */}
-                    <HybridMealImage 
-                      mealId={meal.id} 
-                      mealName={meal.name}
-                      width={80} 
-                      height={80}
-                      showLoadingText={false}
-                      style={{ marginRight: 12 }}
-                    />
+                  <View style={{ marginBottom: 12 }}>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 }}>{meal.name}</Text>

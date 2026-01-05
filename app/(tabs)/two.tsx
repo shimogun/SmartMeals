@@ -9,6 +9,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import secureAiService, { UserHealthProfile } from '../../services/secureAiService';
 import localMealEngine from '../../services/localMealEngine';
+import mealStorageService, { SavedMealPlan } from '../../services/mealStorageService';
 
 // 型定義
 interface GlucoseRecord {
@@ -75,6 +76,11 @@ export default function TwoScreen() {
   const [selectedPeriod, setSelectedPeriod] = useState(3);
   const [selectedServings, setSelectedServings] = useState(1);
   const [selectedStartDate, setSelectedStartDate] = useState(new Date());
+  
+  // 保存された献立プラン関連
+  const [savedMealPlans, setSavedMealPlans] = useState<SavedMealPlan[]>([]);
+  const [showSavedPlansModal, setShowSavedPlansModal] = useState(false);
+  const [selectedSavedPlan, setSelectedSavedPlan] = useState<SavedMealPlan | null>(null);
 
   // 食材データ
   const mainCourses = [
@@ -129,6 +135,7 @@ export default function TwoScreen() {
   useEffect(() => {
     loadUsers();
     loadRecords();
+    loadSavedMealPlans();
   }, []);
 
   const loadUsers = async () => {
@@ -157,6 +164,32 @@ export default function TwoScreen() {
     }
   };
 
+  const loadSavedMealPlans = async () => {
+    try {
+      console.log('🔄 loadSavedMealPlans開始 selectedUserId:', selectedUserId);
+      let plans;
+      if (selectedUserId) {
+        plans = await mealStorageService.getUserMealPlans(selectedUserId);
+        console.log(`📋 ユーザー別献立プラン取得: ${plans.length}件`);
+      } else {
+        plans = await mealStorageService.getSavedMealPlans();
+        console.log(`📋 全献立プラン取得: ${plans.length}件`);
+      }
+      setSavedMealPlans(plans);
+      console.log(`✅ 保存された献立プラン読み込み完了: ${plans.length}件`);
+      console.log('📊 プラン詳細:', plans.map(p => ({ id: p.id, name: p.name, userId: p.userId })));
+    } catch (error) {
+      console.error('❌ 保存献立プラン読み込みエラー:', error);
+    }
+  };
+
+  // ユーザー変更時に保存済み献立プランも更新
+  useEffect(() => {
+    if (selectedUserId) {
+      loadSavedMealPlans();
+    }
+  }, [selectedUserId]);
+
   // ステップ1: 血糖値入力
   const renderStep1 = () => (
     <View style={styles.stepContainer}>
@@ -168,6 +201,7 @@ export default function TwoScreen() {
         contentContainerStyle={styles.stepScrollContent}
         directionalLockEnabled={true}
         keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled={true}
       >
         {/* 食材選択セクション */}
         <View style={styles.ingredientSection}>
@@ -359,13 +393,48 @@ export default function TwoScreen() {
           </View>
         </View>
 
-        {/* 記録ボタン */}
-        <TouchableOpacity 
-          style={styles.recordButton} 
-          onPress={() => setCurrentStep(2)}
-        >
-          <Text style={styles.recordButtonText}>献立を生成</Text>
-        </TouchableOpacity>
+
+        <View style={{ paddingTop: 20, paddingBottom: 50, zIndex: 100 }}>
+          {/* 記録ボタン */}
+          <TouchableOpacity 
+            style={[styles.recordButton, { zIndex: 101 }]} 
+            onPress={() => setCurrentStep(2)}
+          >
+            <Text style={styles.recordButtonText}>献立を生成</Text>
+          </TouchableOpacity>
+
+          {/* 保存済み献立プランボタン */}
+          {(() => {
+            const hasData = savedMealPlans && savedMealPlans.length > 0;
+            
+            if (hasData) {
+              return (
+                <TouchableOpacity 
+                  style={[
+                    styles.recordButton,
+                    styles.savedPlansButton,
+                    {
+                      zIndex: 102,
+                      elevation: 5,
+                    }
+                  ]} 
+                  activeOpacity={0.8}
+                  onPress={() => {
+                    console.log('📚 過去の献立を見るボタンが押されました');
+                    setShowSavedPlansModal(true);
+                  }}
+                >
+                  <Text style={[styles.recordButtonText, styles.savedPlansButtonText]}>
+                    📚 過去の献立を見る ({savedMealPlans.length}件)
+                  </Text>
+                </TouchableOpacity>
+              );
+            }
+            return null; // データがない場合はボタンを表示しない
+          })()}
+          
+
+        </View>
       </ScrollView>
     </View>
   );
@@ -446,6 +515,26 @@ export default function TwoScreen() {
       }
       
       setGeneratedMeals(generatedMeals);
+      
+      // 献立プランを自動保存
+      try {
+        if (selectedUserId && Object.keys(generatedMeals).length > 0) {
+          await mealStorageService.saveMealPlan(
+            selectedUserId,
+            generatedMeals,
+            userProfile,
+            periodDays,
+            new Date()
+          );
+          // 保存後、リストを更新
+          await loadSavedMealPlans();
+          console.log('✅ 献立プランが自動保存されました');
+        }
+      } catch (saveError) {
+        console.warn('献立プラン自動保存エラー:', saveError);
+        // 保存エラーでも献立表示は継続
+      }
+      
       setCurrentStep(3);
     } catch (error) {
       console.error('献立生成エラー:', error);
@@ -470,12 +559,32 @@ export default function TwoScreen() {
     </View>
   );
 
+  // シンプルな戻るスワイプジェスチャー
+  const backSwipeGesture = PanResponder.create({
+    onMoveShouldSetPanResponder: (evt, gestureState) => {
+      // 右方向スワイプのみ検出
+      return gestureState.dx > 50 && Math.abs(gestureState.dy) < 100;
+    },
+    onPanResponderRelease: (evt, gestureState) => {
+      // 右スワイプで1画面前に戻る
+      if (gestureState.dx > 100) {
+        if (selectedMealDetail) {
+          // 詳細→一覧
+          setSelectedMealDetail(null);
+        } else if (currentStep === 3) {
+          // 一覧→食材選択
+          setCurrentStep(1);
+        }
+      }
+    },
+  });
+
   // ステップ3: 献立表示
   const renderStep3 = () => {
     // 詳細表示の場合
     if (selectedMealDetail) {
       return (
-        <View style={styles.stepContainer}>
+        <View style={styles.stepContainer} {...backSwipeGesture.panHandlers}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             <TouchableOpacity 
               onPress={() => setSelectedMealDetail(null)}
@@ -486,7 +595,12 @@ export default function TwoScreen() {
             <Text style={styles.sectionTitle}>{selectedMealDetail.name}</Text>
           </View>
           
-          <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
+          <View style={{ flex: 1 }}>
+            <ScrollView 
+              style={styles.stepScrollView} 
+              showsVerticalScrollIndicator={false}
+              scrollEnabled={true}
+            >
 
             {/* 栄養情報 */}
             <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 20, marginBottom: 20, elevation: 2 }}>
@@ -550,17 +664,28 @@ export default function TwoScreen() {
               <Text style={{ fontSize: 18, fontWeight: 'bold', marginBottom: 15, color: '#333' }}>💡 特徴</Text>
               <Text style={{ fontSize: 16, color: '#666', lineHeight: 24 }}>{selectedMealDetail.description}</Text>
             </View>
-          </ScrollView>
+            </ScrollView>
+          </View>
         </View>
       );
     }
 
     // 献立一覧表示
     return (
-      <View style={styles.stepContainer}>
-        <Text style={styles.sectionTitle}>AI献立提案</Text>
+      <View style={styles.stepContainer} {...backSwipeGesture.panHandlers}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+          <Text style={styles.sectionTitle}>AI献立提案</Text>
+          <Text style={{ fontSize: 14, color: '#666', marginLeft: 10, fontStyle: 'italic' }}>
+            ← スワイプで戻る
+          </Text>
+        </View>
         
-        <ScrollView style={styles.stepScrollView} showsVerticalScrollIndicator={false}>
+        <View style={{ flex: 1 }}>
+          <ScrollView 
+            style={styles.stepScrollView} 
+            showsVerticalScrollIndicator={false}
+            scrollEnabled={true}
+          >
           {Object.entries(generatedMeals).map(([date, meals]) => (
             <View key={date} style={{ marginBottom: 20 }}>
               <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', marginBottom: 15, textAlign: 'center' }}>
@@ -609,31 +734,32 @@ export default function TwoScreen() {
               ))}
             </View>
           ))}
-          
-          <TouchableOpacity 
-            style={styles.recordButton} 
-            onPress={() => setCurrentStep(1)}
-          >
-            <Text style={styles.recordButtonText}>新しい献立を作成</Text>
-          </TouchableOpacity>
-        </ScrollView>
+          </ScrollView>
+        </View>
       </View>
     );
   };
 
-  // 現在のステップに応じて表示
+  // レンダリング部分
+  let mainContent;
   if (currentStep === 1) {
-    return renderStep1();
+    mainContent = renderStep1();
   } else if (currentStep === 2) {
-    setTimeout(generatePeriodMeals, 1000); // 1秒後に生成開始
-    return renderStep2();
+    setTimeout(generatePeriodMeals, 1000);
+    mainContent = renderStep2();
   } else if (currentStep === 3) {
-    return renderStep3();
+    mainContent = renderStep3();
+  } else {
+    mainContent = (
+      <View style={styles.container}>
+        <Text style={styles.sectionTitle}>エラー</Text>
+      </View>
+    );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.sectionTitle}>エラー</Text>
+    <>
+      {mainContent}
       
       {/* 食事タイプ選択モーダル */}
       <Modal
@@ -675,7 +801,62 @@ export default function TwoScreen() {
         </View>
       </Modal>
 
-    </View>
+      {/* 保存済み献立プラン一覧モーダル */}
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={showSavedPlansModal}
+        onRequestClose={() => setShowSavedPlansModal(false)}
+      >
+        <View style={styles.modalBackground}>
+          <View style={[styles.modalContainer, { maxHeight: '85%', width: '95%' }]}>
+            <Text style={styles.modalTitle}>過去の献立プラン</Text>
+            
+            <ScrollView showsVerticalScrollIndicator={false}>
+              {savedMealPlans.map((plan, index) => (
+                <TouchableOpacity
+                  key={plan.id}
+                  style={styles.savedPlanItem}
+                  onPress={() => {
+                    setSelectedSavedPlan(plan);
+                    setGeneratedMeals(plan.meals);
+                    setShowSavedPlansModal(false);
+                    setCurrentStep(3);
+                  }}
+                >
+                  <View style={styles.savedPlanHeader}>
+                    <Text style={styles.savedPlanName}>{plan.name}</Text>
+                    <Text style={styles.savedPlanDate}>
+                      {new Date(plan.createdAt).toLocaleDateString('ja-JP')}
+                    </Text>
+                  </View>
+                  <Text style={styles.savedPlanDetails}>
+                    📅 {plan.period}日間 | 🍽️ {Object.values(plan.meals).flat().length}品目
+                  </Text>
+                  <Text style={styles.savedPlanDetails}>
+                    開始日: {new Date(plan.startDate).toLocaleDateString('ja-JP')}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+              
+              {savedMealPlans.length === 0 && (
+                <View style={styles.emptyPlansContainer}>
+                  <Text style={styles.emptyPlansText}>保存された献立プランはありません</Text>
+                  <Text style={styles.emptyPlansSubText}>献立を生成すると自動保存されます</Text>
+                </View>
+              )}
+            </ScrollView>
+            
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowSavedPlansModal(false)}
+            >
+              <Text style={styles.modalCloseText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+    </>
   );
 }
 
@@ -692,7 +873,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   stepScrollContent: {
-    paddingBottom: 100,
+    paddingBottom: 200,
+    flexGrow: 1,
   },
   sectionTitle: {
     fontSize: 24,
@@ -1206,5 +1388,57 @@ const styles = StyleSheet.create({
     color: '#333',
     flex: 1,
     lineHeight: 20,
+  },
+  savedPlansButton: {
+    backgroundColor: '#28a745',
+    marginTop: 10,
+  },
+  savedPlansButtonText: {
+    color: '#fff',
+  },
+  savedPlanItem: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#e9ecef',
+  },
+  savedPlanHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  savedPlanName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    flex: 1,
+  },
+  savedPlanDate: {
+    fontSize: 12,
+    color: '#666',
+  },
+  savedPlanDetails: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+  },
+  emptyPlansContainer: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  emptyPlansText: {
+    fontSize: 16,
+    color: '#999',
+    textAlign: 'center',
+    marginBottom: 10,
+  },
+  emptyPlansSubText: {
+    fontSize: 14,
+    color: '#ccc',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
 });

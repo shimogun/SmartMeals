@@ -24,6 +24,10 @@ type WeeklyRecord = {
   condition: 'good' | 'normal' | 'poor' | null;
   hba1c: number | null;
   timestamp: number;
+  bloodPressure?: {
+    systolic: number; // 収縮期血圧（上）
+    diastolic: number; // 拡張期血圧（下）
+  };
 };
 
 export default function ChartScreen() {
@@ -89,7 +93,7 @@ export default function ChartScreen() {
       const stored = await AsyncStorage.getItem('glucose_records');
       if (stored) {
         const parsedRecords = JSON.parse(stored);
-        setRecords(parsedRecords.sort((a, b) => a.timestamp - b.timestamp));
+        setRecords(parsedRecords.sort((a: GlucoseRecord, b: GlucoseRecord) => a.timestamp - b.timestamp));
       }
     } catch (error) {
       console.error('データ読み込みエラー:', error);
@@ -101,7 +105,7 @@ export default function ChartScreen() {
       const stored = await AsyncStorage.getItem('weekly_records');
       if (stored) {
         const parsedRecords = JSON.parse(stored);
-        setWeeklyRecords(parsedRecords.sort((a, b) => a.timestamp - b.timestamp));
+        setWeeklyRecords(parsedRecords.sort((a: WeeklyRecord, b: WeeklyRecord) => a.timestamp - b.timestamp));
       }
     } catch (error) {
       console.error('週間データ読み込みエラー:', error);
@@ -397,7 +401,7 @@ export default function ChartScreen() {
             {mealStats.length > 0 && (
               <View style={styles.mealStatsContainer}>
                 <Text style={styles.sectionTitle}>食事タイミング別平均</Text>
-                {mealStats.map((stat, index) => (
+                {mealStats.map((stat, index) => stat && (
                   <View key={index} style={styles.mealStatItem}>
                     <Text style={styles.mealStatType}>{stat.type}</Text>
                     <View style={styles.mealStatValues}>
@@ -429,6 +433,39 @@ export default function ChartScreen() {
             <Text style={styles.recordCount}>
               総記録数: {records.length}件 | {getTimeRangeText()}期間: {getFilteredRecords().length}件
             </Text>
+
+            {/* 週間記録一覧 */}
+            {weeklyRecords.length > 0 && (
+              <View style={styles.weeklyRecordsContainer}>
+                <Text style={styles.sectionTitle}>📊 週間記録履歴</Text>
+                {weeklyRecords.slice(-5).reverse().map((record, index) => (
+                  <View key={record.id} style={styles.weeklyRecordItem}>
+                    <Text style={styles.weeklyRecordDate}>
+                      {new Date(record.weekStart).toLocaleDateString('ja-JP')}〜の週
+                    </Text>
+                    <View style={styles.weeklyRecordDetails}>
+                      {record.weight && (
+                        <Text style={styles.weeklyRecordText}>体重: {record.weight}kg</Text>
+                      )}
+                      {record.bloodPressure && (
+                        <Text style={styles.weeklyRecordText}>
+                          血圧: {record.bloodPressure.systolic}/{record.bloodPressure.diastolic} mmHg
+                        </Text>
+                      )}
+                      {record.hba1c && (
+                        <Text style={styles.weeklyRecordText}>HbA1c: {record.hba1c}%</Text>
+                      )}
+                      <Text style={styles.weeklyRecordText}>
+                        運動: {record.exercise === 'high' ? '多い' : record.exercise === 'normal' ? '普通' : '少ない'}
+                      </Text>
+                      <Text style={styles.weeklyRecordText}>
+                        体調: {record.condition === 'good' ? '良好' : record.condition === 'normal' ? '普通' : '不調'}
+                      </Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            )}
 
             {/* 週間記録追加ボタン */}
             <TouchableOpacity 
@@ -499,6 +536,8 @@ function WeeklyRecordModal({
   const [exercise, setExercise] = useState<'high' | 'normal' | 'low' | null>('normal');
   const [condition, setCondition] = useState<'good' | 'normal' | 'poor' | null>('normal');
   const [hba1c, setHba1c] = useState('');
+  const [systolic, setSystolic] = useState('');
+  const [diastolic, setDiastolic] = useState('');
 
   // 今週の週開始日を取得
   const getCurrentWeekStart = () => {
@@ -516,6 +555,10 @@ function WeeklyRecordModal({
       exercise,
       condition,
       hba1c: hba1c ? parseFloat(hba1c) : null,
+      bloodPressure: (systolic && diastolic) ? {
+        systolic: parseFloat(systolic),
+        diastolic: parseFloat(diastolic)
+      } : undefined,
     };
 
     onSave(weeklyRecord);
@@ -525,6 +568,8 @@ function WeeklyRecordModal({
     setExercise('normal');
     setCondition('normal');
     setHba1c('');
+    setSystolic('');
+    setDiastolic('');
     
     onClose();
   };
@@ -604,6 +649,31 @@ function WeeklyRecordModal({
                   </TouchableOpacity>
                 ))}
               </View>
+            </View>
+
+            {/* 血圧 */}
+            <View style={styles.weeklyInputSection}>
+              <Text style={styles.weeklyInputLabel}>血圧 (mmHg) ※任意</Text>
+              <View style={styles.bloodPressureInputContainer}>
+                <TextInput
+                  style={[styles.weeklyNumberInput, styles.bloodPressureInput]}
+                  value={systolic}
+                  onChangeText={setSystolic}
+                  placeholder="120"
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                />
+                <Text style={styles.bloodPressureSeparator}>/</Text>
+                <TextInput
+                  style={[styles.weeklyNumberInput, styles.bloodPressureInput]}
+                  value={diastolic}
+                  onChangeText={setDiastolic}
+                  placeholder="80"
+                  keyboardType="numeric"
+                  placeholderTextColor="#999"
+                />
+              </View>
+              <Text style={styles.bloodPressureNote}>上の血圧 / 下の血圧</Text>
             </View>
 
             {/* HbA1c */}
@@ -1008,5 +1078,90 @@ const styles = StyleSheet.create({
   },
   userSelectionNameActive: {
     color: '#fff',
+  },
+  bloodPressureInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  bloodPressureInput: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  bloodPressureSeparator: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#333',
+    marginHorizontal: 10,
+  },
+  bloodPressureNote: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginTop: 5,
+    fontStyle: 'italic',
+  },
+  recordCount: {
+    textAlign: 'center',
+    fontSize: 14,
+    color: '#666',
+    marginTop: 10,
+    marginBottom: 20,
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    margin: 20,
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 20,
+    color: '#333',
+  },
+  modalCloseButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 12,
+    padding: 15,
+    marginTop: 10,
+  },
+  modalCloseText: {
+    fontSize: 16,
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: 'bold',
+  },
+  weeklyRecordsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    elevation: 3,
+  },
+  weeklyRecordItem: {
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+    paddingVertical: 15,
+  },
+  weeklyRecordDate: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+    marginBottom: 10,
+  },
+  weeklyRecordDetails: {
+    paddingLeft: 10,
+  },
+  weeklyRecordText: {
+    fontSize: 14,
+    color: '#333',
+    marginBottom: 4,
   },
 });

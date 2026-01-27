@@ -559,32 +559,13 @@ export default function TwoScreen() {
     </View>
   );
 
-  // シンプルな戻るスワイプジェスチャー
-  const backSwipeGesture = PanResponder.create({
-    onMoveShouldSetPanResponder: (evt, gestureState) => {
-      // 右方向スワイプのみ検出
-      return gestureState.dx > 50 && Math.abs(gestureState.dy) < 100;
-    },
-    onPanResponderRelease: (evt, gestureState) => {
-      // 右スワイプで1画面前に戻る
-      if (gestureState.dx > 100) {
-        if (selectedMealDetail) {
-          // 詳細→一覧
-          setSelectedMealDetail(null);
-        } else if (currentStep === 3) {
-          // 一覧→食材選択
-          setCurrentStep(1);
-        }
-      }
-    },
-  });
 
   // ステップ3: 献立表示
   const renderStep3 = () => {
     // 詳細表示の場合
     if (selectedMealDetail) {
       return (
-        <View style={styles.stepContainer} {...backSwipeGesture.panHandlers}>
+        <View style={styles.stepContainer}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
             <TouchableOpacity 
               onPress={() => setSelectedMealDetail(null)}
@@ -672,12 +653,15 @@ export default function TwoScreen() {
 
     // 献立一覧表示
     return (
-      <View style={styles.stepContainer} {...backSwipeGesture.panHandlers}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 20 }}>
+      <View style={styles.stepContainer}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
+          <TouchableOpacity
+            onPress={() => setCurrentStep(1)}
+            style={{ padding: 8, marginRight: 10 }}
+          >
+            <Ionicons name="arrow-back" size={24} color="#007AFF" />
+          </TouchableOpacity>
           <Text style={styles.sectionTitle}>AI献立提案</Text>
-          <Text style={{ fontSize: 14, color: '#666', marginLeft: 10, fontStyle: 'italic' }}>
-            ← スワイプで戻る
-          </Text>
         </View>
         
         <View style={{ flex: 1 }}>

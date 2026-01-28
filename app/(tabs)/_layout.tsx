@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Tabs } from 'expo-router';
-import { Pressable, TouchableOpacity, Alert } from 'react-native';
+import { Pressable, TouchableOpacity, Alert, View, StyleSheet } from 'react-native';
 import SettingsScreen from '../../components/SettingsScreen';
 
 import Colors from '@/constants/Colors';
@@ -15,6 +15,17 @@ function TabBarIcon(props: {
   color: string;
 }) {
   return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
+}
+
+// +ボタン用のカスタムアイコン
+function PlusButtonIcon({ focused }: { focused: boolean }) {
+  return (
+    <View style={styles.plusButtonContainer}>
+      <View style={styles.plusButton}>
+        <Ionicons name="add" size={32} color="#fff" />
+      </View>
+    </View>
+  );
 }
 
 // 設定ボタンコンポーネント
@@ -57,6 +68,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="record"
+        options={{
+          title: '',
+          tabBarIcon: ({ focused }) => <PlusButtonIcon focused={focused} />,
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
+          headerTitle: '記録',
+        }}
+      />
+      <Tabs.Screen
         name="two"
         options={{
           title: '献立',
@@ -64,20 +84,34 @@ export default function TabLayout() {
           headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
         }}
       />
-      <Tabs.Screen
-        name="chart"
-        options={{
-          title: '経過',
-          tabBarIcon: ({ color }) => <TabBarIcon name="line-chart" color={color} />,
-          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
-        }}
-      />
     </Tabs>
 
-    <SettingsScreen 
+    <SettingsScreen
       visible={showSettings}
       onClose={() => setShowSettings(false)}
     />
     </>
   );
 }
+
+const styles = StyleSheet.create({
+  plusButtonContainer: {
+    position: 'relative',
+    alignItems: 'center',
+    justifyContent: 'center',
+    top: -15,
+  },
+  plusButton: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#007AFF',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+});

@@ -2,15 +2,42 @@ import { useState, useRef, useEffect } from 'react';
 import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Dimensions, Modal, TextInput, Alert, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Animated, { 
-  useSharedValue, 
-  useAnimatedStyle, 
-  runOnJS, 
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  runOnJS,
   withSpring,
   interpolate,
   Extrapolate
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+
+type GlucoseRecord = {
+  id: string;
+  value: number;
+  timestamp: number;
+  date: string;
+  mealType: string;
+  mealNote: string;
+  userId?: string;
+};
+
+type TimeRange = '1week' | '1month' | '3months';
+
+type WeeklyRecord = {
+  id: string;
+  weekStart: string;
+  weight: number | null;
+  exercise: 'high' | 'normal' | 'low' | null;
+  condition: 'good' | 'normal' | 'poor' | null;
+  hba1c: number | null;
+  timestamp: number;
+  bloodPressure?: {
+    systolic: number;
+    diastolic: number;
+  };
+  userId?: string;
+};
 
 type User = {
   id: string;
@@ -29,6 +56,14 @@ type User = {
 
 const { width } = Dimensions.get('window');
 
+// 血糖値レベルに応じた色を返す関数
+const getGlucoseColor = (value: number): string => {
+  if (value < 70) return '#2196F3'; // 低血糖（青）
+  if (value <= 109) return '#4CAF50'; // 正常値（緑）
+  if (value <= 125) return '#FF9800'; // 境界型（オレンジ）
+  return '#F44336'; // 糖尿病型（赤）
+};
+
 export default function HomeScreen() {
   const [users, setUsers] = useState<User[]>([]);
   const [currentUserIndex, setCurrentUserIndex] = useState(0);
@@ -37,17 +72,23 @@ export default function HomeScreen() {
   const [showHealthModal, setShowHealthModal] = useState(false);
   const [showUserDetailModal, setShowUserDetailModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
   const [editName, setEditName] = useState('');
   const [editAge, setEditAge] = useState('');
   const [newName, setNewName] = useState('');
   const [newAge, setNewAge] = useState('');
-  
+
   // 健康情報用のstate
   const [healthHeight, setHealthHeight] = useState('');
   const [healthWeight, setHealthWeight] = useState('');
   const [healthGender, setHealthGender] = useState<'male' | 'female'>('male');
   const [healthActivity, setHealthActivity] = useState<'light' | 'moderate' | 'high'>('moderate');
   const [selectedHealthUserIndex, setSelectedHealthUserIndex] = useState(0);
+
+  // 統計データ用のstate
+  const [glucoseRecords, setGlucoseRecords] = useState<GlucoseRecord[]>([]);
+  const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
+  const [timeRange, setTimeRange] = useState<TimeRange>('1week');
 
   // スワイプアニメーション用
   const translateX = useSharedValue(0);
@@ -78,6 +119,18 @@ export default function HomeScreen() {
        };
        setUsers([defaultUser]);
        await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
+     }
+
+     // 血糖値データ読み込み
+     const storedGlucose = await AsyncStorage.getItem('glucose_records');
+     if (storedGlucose) {
+       setGlucoseRecords(JSON.parse(storedGlucose));
+     }
+
+     // 週間記録データ読み込み
+     const storedWeekly = await AsyncStorage.getItem('weekly_records');
+     if (storedWeekly) {
+       setWeeklyRecords(JSON.parse(storedWeekly));
      }
    } catch (error) {
      console.error('データ読み込みエラー:', error);
@@ -212,6 +265,51 @@ const animatedCardStyle = useAnimatedStyle(() => {
    setShowUserDetailModal(true);
  };
 
+ // 統計モーダルを開く
+ const openStatsModal = () => {
+   loadData(); // 最新データを読み込み
+   setShowStatsModal(true);
+ };
+
+ // 現在のユーザーのサマリーを取得
+ const getUserSummary = () => {
+   const currentUser = users[currentUserIndex];
+   if (!currentUser) return { avgGlucose: null, latestWeight: null, glucoseChange: null };
+
+   // 直近1週間の血糖値データを取得
+   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+   const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+
+   const userGlucoseRecords = glucoseRecords.filter(r =>
+     r.userId === currentUser.id || (!r.userId && currentUserIndex === 0)
+   );
+
+   const thisWeekRecords = userGlucoseRecords.filter(r => r.timestamp >= oneWeekAgo);
+   const lastWeekRecords = userGlucoseRecords.filter(r => r.timestamp >= twoWeeksAgo && r.timestamp < oneWeekAgo);
+
+   // 今週の平均
+   const avgGlucose = thisWeekRecords.length > 0
+     ? Math.round(thisWeekRecords.reduce((sum, r) => sum + r.value, 0) / thisWeekRecords.length)
+     : null;
+
+   // 先週の平均との差
+   const lastWeekAvg = lastWeekRecords.length > 0
+     ? Math.round(lastWeekRecords.reduce((sum, r) => sum + r.value, 0) / lastWeekRecords.length)
+     : null;
+
+   const glucoseChange = avgGlucose && lastWeekAvg ? avgGlucose - lastWeekAvg : null;
+
+   // 最新の体重を取得
+   const userWeeklyRecords = weeklyRecords
+     .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
+     .filter(r => r.weight !== null)
+     .sort((a, b) => b.timestamp - a.timestamp);
+
+   const latestWeight = userWeeklyRecords.length > 0 ? userWeeklyRecords[0].weight : null;
+
+   return { avgGlucose, latestWeight, glucoseChange };
+ };
+
  // ユーザー選択時に健康情報を更新
  const onHealthUserChange = (userIndex: number) => {
    setSelectedHealthUserIndex(userIndex);
@@ -344,33 +442,71 @@ const animatedCardStyle = useAnimatedStyle(() => {
     );
   }
 
+  const summary = getUserSummary();
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.swipeContainer}>
         {/* メインプロフィールカード */}
         <GestureDetector gesture={panGesture}>
-          <TouchableOpacity
-            style={styles.cardTouchable}
-            onPress={showUserDetail}
-            activeOpacity={0.9}
-          >
-            <Animated.View style={[styles.profileCard, animatedCardStyle]}>
-              {/* アバター */}
-              <View style={styles.avatarContainer}>
-                <Text style={styles.avatarEmoji}>{currentUser.avatar}</Text>
-              </View>
-              
-              {/* ユーザー名 */}
-              <Text style={styles.userName}>{currentUser.name}</Text>
-              <Text style={styles.userAge}>{currentUser.age}歳</Text>
-            </Animated.View>
-          </TouchableOpacity>
-        </GestureDetector>
+          <Animated.View style={[styles.profileCard, animatedCardStyle]}>
+            {/* アバター */}
+            <View style={styles.avatarContainer}>
+              <Text style={styles.avatarEmoji}>{currentUser.avatar}</Text>
+            </View>
 
+            {/* ユーザー名 */}
+            <Text style={styles.userName}>{currentUser.name}</Text>
+            <Text style={styles.userAge}>{currentUser.age}歳</Text>
+
+            {/* サマリー表示 */}
+            <View style={styles.summaryContainer}>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>血糖</Text>
+                {summary.avgGlucose ? (
+                  <View style={styles.summaryValueContainer}>
+                    <View style={[styles.glucoseIndicator, { backgroundColor: getGlucoseColor(summary.avgGlucose) }]} />
+                    <Text style={[styles.summaryValue, { color: getGlucoseColor(summary.avgGlucose) }]}>{summary.avgGlucose}</Text>
+                    <Text style={styles.summaryUnit}>mg/dL</Text>
+                    {summary.glucoseChange !== null && (
+                      <Text style={[
+                        styles.summaryChange,
+                        summary.glucoseChange < 0 ? styles.changeGood : styles.changeBad
+                      ]}>
+                        {summary.glucoseChange > 0 ? '+' : ''}{summary.glucoseChange}
+                      </Text>
+                    )}
+                  </View>
+                ) : (
+                  <Text style={styles.summaryNoData}>--</Text>
+                )}
+              </View>
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryLabel}>体重</Text>
+                {summary.latestWeight ? (
+                  <View style={styles.summaryValueContainer}>
+                    <Text style={styles.summaryValue}>{summary.latestWeight}</Text>
+                    <Text style={styles.summaryUnit}>kg</Text>
+                  </View>
+                ) : (
+                  <Text style={styles.summaryNoData}>--</Text>
+                )}
+              </View>
+            </View>
+
+            {/* 詳細ボタン */}
+            <TouchableOpacity
+              style={styles.detailButton}
+              onPress={openStatsModal}
+            >
+              <Text style={styles.detailButtonText}>詳細</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </GestureDetector>
 
         {/* アクションボタン */}
         <View style={styles.actionButtons}>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={startEditProfile}
           >
@@ -732,6 +868,152 @@ const animatedCardStyle = useAnimatedStyle(() => {
           </View>
         </View>
       </Modal>
+
+      {/* 統計モーダル */}
+      <Modal
+        visible={showStatsModal}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowStatsModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.statsModalContent}>
+            <Text style={styles.statsModalTitle}>{currentUser.name} の記録と統計</Text>
+
+            {/* 期間選択 */}
+            <View style={styles.timeRangeContainer}>
+              {(['1week', '1month', '3months'] as TimeRange[]).map((range) => (
+                <TouchableOpacity
+                  key={range}
+                  style={[
+                    styles.timeRangeButton,
+                    timeRange === range && styles.timeRangeButtonActive
+                  ]}
+                  onPress={() => setTimeRange(range)}
+                >
+                  <Text style={[
+                    styles.timeRangeText,
+                    timeRange === range && styles.timeRangeTextActive
+                  ]}>
+                    {range === '1week' ? '1週間' : range === '1month' ? '1ヶ月' : '3ヶ月'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <ScrollView style={styles.statsScrollView} showsVerticalScrollIndicator={false}>
+              {/* 血糖値統計 */}
+              <View style={styles.statsSection}>
+                <Text style={styles.statsSectionTitle}>血糖値</Text>
+                {(() => {
+                  const now = Date.now();
+                  const rangeMs = timeRange === '1week' ? 7 * 24 * 60 * 60 * 1000
+                    : timeRange === '1month' ? 30 * 24 * 60 * 60 * 1000
+                    : 90 * 24 * 60 * 60 * 1000;
+                  const filteredRecords = glucoseRecords
+                    .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
+                    .filter(r => r.timestamp >= now - rangeMs);
+
+                  if (filteredRecords.length === 0) {
+                    return <Text style={styles.noDataText}>データがありません</Text>;
+                  }
+
+                  const avg = Math.round(filteredRecords.reduce((sum, r) => sum + r.value, 0) / filteredRecords.length);
+                  const max = Math.max(...filteredRecords.map(r => r.value));
+                  const min = Math.min(...filteredRecords.map(r => r.value));
+
+                  return (
+                    <View style={styles.statsGrid}>
+                      <View style={styles.statsGridItem}>
+                        <Text style={styles.statsGridLabel}>平均</Text>
+                        <View style={styles.statsValueRow}>
+                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(avg) }]} />
+                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(avg) }]}>{avg}</Text>
+                        </View>
+                        <Text style={styles.statsGridUnit}>mg/dL</Text>
+                      </View>
+                      <View style={styles.statsGridItem}>
+                        <Text style={styles.statsGridLabel}>最高</Text>
+                        <View style={styles.statsValueRow}>
+                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(max) }]} />
+                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(max) }]}>{max}</Text>
+                        </View>
+                        <Text style={styles.statsGridUnit}>mg/dL</Text>
+                      </View>
+                      <View style={styles.statsGridItem}>
+                        <Text style={styles.statsGridLabel}>最低</Text>
+                        <View style={styles.statsValueRow}>
+                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(min) }]} />
+                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(min) }]}>{min}</Text>
+                        </View>
+                        <Text style={styles.statsGridUnit}>mg/dL</Text>
+                      </View>
+                      <View style={styles.statsGridItem}>
+                        <Text style={styles.statsGridLabel}>記録数</Text>
+                        <Text style={styles.statsGridValue}>{filteredRecords.length}</Text>
+                        <Text style={styles.statsGridUnit}>回</Text>
+                      </View>
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {/* 体重推移 */}
+              <View style={styles.statsSection}>
+                <Text style={styles.statsSectionTitle}>体重記録</Text>
+                {(() => {
+                  const userWeightRecords = weeklyRecords
+                    .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
+                    .filter(r => r.weight !== null)
+                    .sort((a, b) => b.timestamp - a.timestamp)
+                    .slice(0, 5);
+
+                  if (userWeightRecords.length === 0) {
+                    return <Text style={styles.noDataText}>データがありません</Text>;
+                  }
+
+                  return (
+                    <View>
+                      {userWeightRecords.map((record, index) => (
+                        <View key={record.id} style={styles.weightRecordItem}>
+                          <Text style={styles.weightRecordDate}>
+                            {new Date(record.timestamp).toLocaleDateString('ja-JP')}
+                          </Text>
+                          <Text style={styles.weightRecordValue}>{record.weight} kg</Text>
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })()}
+              </View>
+
+              {/* 血糖値の目安 */}
+              <View style={styles.statsSection}>
+                <Text style={styles.statsSectionTitle}>血糖値の目安</Text>
+                <View style={styles.referenceItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#4CAF50' }]} />
+                  <Text style={styles.referenceText}>正常値: 70-109 mg/dL（空腹時）</Text>
+                </View>
+                <View style={styles.referenceItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#FF9800' }]} />
+                  <Text style={styles.referenceText}>境界型: 110-125 mg/dL</Text>
+                </View>
+                <View style={styles.referenceItem}>
+                  <View style={[styles.colorIndicator, { backgroundColor: '#F44336' }]} />
+                  <Text style={styles.referenceText}>糖尿病型: 126 mg/dL以上</Text>
+                </View>
+              </View>
+            </ScrollView>
+
+            <TouchableOpacity
+              style={styles.detailCloseButton}
+              onPress={() => setShowStatsModal(false)}
+            >
+              <Text style={styles.detailCloseText}>閉じる</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -750,47 +1032,48 @@ const styles = StyleSheet.create({
   profileCard: {
     width: width * 0.85,
     backgroundColor: '#fff',
-    borderRadius: 30,
-    padding: 40,
+    borderRadius: 24,
+    padding: 24,
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 15,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 15,
+    elevation: 12,
   },
   avatarContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 12,
   },
   avatarEmoji: {
-    fontSize: 60,
+    fontSize: 40,
   },
   userName: {
-    fontSize: 32,
+    fontSize: 26,
     fontWeight: '700',
     color: '#333',
-    marginBottom: 5,
+    marginBottom: 2,
   },
   userAge: {
-    fontSize: 18,
+    fontSize: 16,
     color: '#666',
-    marginBottom: 30,
+    marginBottom: 15,
   },
   actionButtons: {
-    marginTop: 40,
+    marginTop: 20,
     width: width * 0.85,
+    paddingBottom: 80,
   },
   actionButton: {
     backgroundColor: '#fff',
-    borderRadius: 25,
-    paddingVertical: 15,
-    marginBottom: 15,
+    borderRadius: 20,
+    paddingVertical: 12,
+    marginBottom: 10,
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -1093,5 +1376,206 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     fontWeight: 'bold',
+  },
+  // サマリー表示用スタイル
+  summaryContainer: {
+    width: '100%',
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 12,
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  summaryLabel: {
+    fontSize: 16,
+    color: '#666',
+    fontWeight: '600',
+  },
+  summaryValueContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  glucoseIndicator: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginRight: 6,
+  },
+  summaryValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  summaryUnit: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 4,
+  },
+  summaryChange: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginLeft: 8,
+  },
+  changeGood: {
+    color: '#4CAF50',
+  },
+  changeBad: {
+    color: '#F44336',
+  },
+  summaryNoData: {
+    fontSize: 18,
+    color: '#ccc',
+  },
+  detailButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 30,
+  },
+  detailButtonText: {
+    fontSize: 16,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // 統計モーダル用スタイル
+  statsModalContent: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 20,
+    margin: 20,
+    maxHeight: '85%',
+  },
+  statsModalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    marginBottom: 15,
+    color: '#333',
+  },
+  timeRangeContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#f0f0f0',
+    borderRadius: 10,
+    padding: 4,
+    marginBottom: 15,
+  },
+  timeRangeButton: {
+    flex: 1,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  timeRangeButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  timeRangeText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  timeRangeTextActive: {
+    color: '#fff',
+  },
+  statsScrollView: {
+    maxHeight: '70%',
+  },
+  statsSection: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+  },
+  statsSectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    paddingBottom: 8,
+  },
+  noDataText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    fontStyle: 'italic',
+    padding: 10,
+  },
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statsGridItem: {
+    width: '48%',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  statsGridLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  statsValueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statsColorIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 4,
+  },
+  statsGridValue: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  statsGridUnit: {
+    fontSize: 11,
+    color: '#999',
+  },
+  weightRecordItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
+  },
+  weightRecordDate: {
+    fontSize: 14,
+    color: '#666',
+  },
+  weightRecordValue: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#007AFF',
+  },
+  referenceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  colorIndicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  referenceText: {
+    fontSize: 13,
+    color: '#666',
   },
 });

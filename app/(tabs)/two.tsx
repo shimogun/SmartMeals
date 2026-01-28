@@ -476,10 +476,10 @@ export default function TwoScreen() {
   // AI献立生成
   const generatePeriodMeals = async () => {
     setIsGenerating(true);
-    
+
     try {
       const userProfile = await createUserProfile();
-      const periodDays = 7; // 1週間分
+      const periodDays = 1; // 1日分
       const servings = 1;
       
       let generatedMeals: {[key: string]: GeneratedMeal[]} = {};
@@ -553,7 +553,7 @@ export default function TwoScreen() {
         <ActivityIndicator size="large" color="#007AFF" />
         <Text style={styles.loadingSubText}>
           あなたの健康状態と食材の好みに合わせて{'\n'}
-          最適な献立を作成しています
+          今日の献立を作成しています
         </Text>
       </View>
     </View>

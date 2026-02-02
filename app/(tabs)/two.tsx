@@ -852,6 +852,7 @@ const styles = StyleSheet.create({
   stepContainer: {
     flex: 1,
     paddingHorizontal: 20,
+    backgroundColor: '#f5f5f5',
   },
   stepScrollView: {
     flex: 1,
@@ -869,14 +870,9 @@ const styles = StyleSheet.create({
   },
   ingredientSection: {
     backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   variableSectionTitle: {
     fontSize: 18,
@@ -934,14 +930,9 @@ const styles = StyleSheet.create({
   },
   glucoseInputCard: {
     backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 25,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    elevation: 5,
+    borderRadius: 12,
+    padding: 20,
+    marginBottom: 16,
   },
   valueContainer: {
     alignItems: 'center',
@@ -1024,14 +1015,9 @@ const styles = StyleSheet.create({
   // 変動データセクション
   variableDataSection: {
     backgroundColor: '#fff',
-    borderRadius: 15,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 16,
   },
   variableHorizontalRow: {
     flexDirection: 'row',

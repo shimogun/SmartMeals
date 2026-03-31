@@ -5,6 +5,7 @@ import { GeneratedMeal } from '../types';
 
 interface DailyNutritionSummaryProps {
   date: string; // YYYY-MM-DD
+  meals?: GeneratedMeal[];
 }
 
 // 日次栄養目標（糖尿病管理向けデフォルト値）
@@ -75,13 +76,18 @@ const NutrientBar = ({ label, value, target, unit }: {
   );
 };
 
-export default function DailyNutritionSummary({ date }: DailyNutritionSummaryProps) {
+export default function DailyNutritionSummary({ date, meals: propMeals }: DailyNutritionSummaryProps) {
   const [meals, setMeals] = useState<GeneratedMeal[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    loadMeals();
-  }, [date]);
+    if (propMeals) {
+      setMeals(propMeals);
+      setLoading(false);
+    } else {
+      loadMeals();
+    }
+  }, [date, propMeals]);
 
   const loadMeals = async () => {
     setLoading(true);

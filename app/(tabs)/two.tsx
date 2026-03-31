@@ -39,6 +39,7 @@ export default function MealPlanScreen() {
   const [genPeriod, setGenPeriod] = useState<3 | 5 | 7>(3);
   const [genServings, setGenServings] = useState<1 | 2 | 3 | 4>(1);
   const [genRestriction, setGenRestriction] = useState<RestrictionLevel>('ふつう');
+  const [preferLowGi, setPreferLowGi] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
   // Plan detail modal
@@ -148,6 +149,7 @@ export default function MealPlanScreen() {
       weight: currentUser.healthData?.weight,
       likedFoods: currentUser.foodPreferences?.liked || [],
       dislikedFoods: currentUser.foodPreferences?.disliked || [],
+      preferLowGi,
     };
   };
 
@@ -425,6 +427,19 @@ export default function MealPlanScreen() {
                 genRestriction,
                 setGenRestriction
               )}
+
+              {/* 低GI優先トグル */}
+              <View style={styles.toggleRow}>
+                <Text style={styles.toggleLabel}>低GI優先</Text>
+                <TouchableOpacity
+                  style={[styles.toggleButton, preferLowGi && styles.toggleButtonActive]}
+                  onPress={() => setPreferLowGi(!preferLowGi)}
+                >
+                  <Text style={[styles.toggleButtonText, preferLowGi && styles.toggleButtonTextActive]}>
+                    {preferLowGi ? 'ON' : 'OFF'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
 
               <Text style={styles.autoNote}>
                 血糖値・HbA1c・食材の好みは自動で反映されます
@@ -978,5 +993,34 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#444',
     lineHeight: 20,
+  },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 16,
+    paddingVertical: 8,
+  },
+  toggleLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  toggleButton: {
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#e0e0e0',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#4CAF50',
+  },
+  toggleButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#666',
+  },
+  toggleButtonTextActive: {
+    color: '#fff',
   },
 });

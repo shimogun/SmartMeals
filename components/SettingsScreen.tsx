@@ -80,6 +80,11 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [likedFoods, setLikedFoods] = useState<string[]>([]);
   const [dislikedFoods, setDislikedFoods] = useState<string[]>([]);
   const [showFoodModal, setShowFoodModal] = useState<'liked' | 'disliked' | null>(null);
+  const [targetHba1c, setTargetHba1c] = useState('');
+  const [glucoseMin, setGlucoseMin] = useState('');
+  const [glucoseMax, setGlucoseMax] = useState('');
+  const [dailyCarbLimit, setDailyCarbLimit] = useState('');
+  const [dailyCalorieLimit, setDailyCalorieLimit] = useState('');
 
   useEffect(() => {
     if (visible) {
@@ -127,6 +132,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           if (currentUser.foodPreferences) {
             setLikedFoods(currentUser.foodPreferences.liked || []);
             setDislikedFoods(currentUser.foodPreferences.disliked || []);
+          }
+          if (currentUser.medicalGuidance) {
+            const mg = currentUser.medicalGuidance;
+            if (mg.targetHba1c != null) setTargetHba1c(String(mg.targetHba1c));
+            if (mg.glucoseMin != null) setGlucoseMin(String(mg.glucoseMin));
+            if (mg.glucoseMax != null) setGlucoseMax(String(mg.glucoseMax));
+            if (mg.dailyCarbLimit != null) setDailyCarbLimit(String(mg.dailyCarbLimit));
+            if (mg.dailyCalorieLimit != null) setDailyCalorieLimit(String(mg.dailyCalorieLimit));
           }
         }
       }
@@ -197,6 +210,29 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
         };
         await AsyncStorage.setItem('users', JSON.stringify(users));
         Alert.alert('保存完了', '食材の好みを更新しました');
+      }
+    } catch {
+      Alert.alert('エラー', '保存に失敗しました');
+    }
+  };
+
+  const saveMedicalGuidance = async () => {
+    try {
+      const usersData = await AsyncStorage.getItem('users');
+      if (!usersData) return;
+      const users = JSON.parse(usersData);
+      const indexData = await AsyncStorage.getItem('currentUserIndex');
+      const index = indexData ? parseInt(indexData) : 0;
+      if (users[index]) {
+        users[index].medicalGuidance = {
+          targetHba1c: targetHba1c ? parseFloat(targetHba1c) : undefined,
+          glucoseMin: glucoseMin ? parseInt(glucoseMin) : undefined,
+          glucoseMax: glucoseMax ? parseInt(glucoseMax) : undefined,
+          dailyCarbLimit: dailyCarbLimit ? parseInt(dailyCarbLimit) : undefined,
+          dailyCalorieLimit: dailyCalorieLimit ? parseInt(dailyCalorieLimit) : undefined,
+        };
+        await AsyncStorage.setItem('users', JSON.stringify(users));
+        Alert.alert('保存完了', '指導値を更新しました');
       }
     } catch {
       Alert.alert('エラー', '保存に失敗しました');
@@ -385,6 +421,38 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
             <TouchableOpacity style={styles.saveFoodButton} onPress={saveFoodPreferences}>
               <Text style={styles.saveFoodButtonText}>食材の好みを保存</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 医師の指導値 */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>医師の指導値</Text>
+            <View style={styles.guidanceRow}>
+              <Text style={styles.guidanceLabel}>HbA1c目標</Text>
+              <TextInput style={styles.guidanceInput} value={targetHba1c} onChangeText={setTargetHba1c} placeholder="例: 6.5" placeholderTextColor="#999" keyboardType="decimal-pad" />
+            </View>
+            <View style={styles.guidanceRow}>
+              <Text style={styles.guidanceLabel}>血糖値目標（下限）</Text>
+              <TextInput style={styles.guidanceInput} value={glucoseMin} onChangeText={setGlucoseMin} placeholder="例: 80" placeholderTextColor="#999" keyboardType="number-pad" />
+              <Text style={styles.guidanceUnit}>mg/dL</Text>
+            </View>
+            <View style={styles.guidanceRow}>
+              <Text style={styles.guidanceLabel}>血糖値目標（上限）</Text>
+              <TextInput style={styles.guidanceInput} value={glucoseMax} onChangeText={setGlucoseMax} placeholder="例: 140" placeholderTextColor="#999" keyboardType="number-pad" />
+              <Text style={styles.guidanceUnit}>mg/dL</Text>
+            </View>
+            <View style={styles.guidanceRow}>
+              <Text style={styles.guidanceLabel}>1日の糖質上限</Text>
+              <TextInput style={styles.guidanceInput} value={dailyCarbLimit} onChangeText={setDailyCarbLimit} placeholder="例: 200" placeholderTextColor="#999" keyboardType="number-pad" />
+              <Text style={styles.guidanceUnit}>g</Text>
+            </View>
+            <View style={styles.guidanceRow}>
+              <Text style={styles.guidanceLabel}>1日のカロリー上限</Text>
+              <TextInput style={styles.guidanceInput} value={dailyCalorieLimit} onChangeText={setDailyCalorieLimit} placeholder="例: 1800" placeholderTextColor="#999" keyboardType="number-pad" />
+              <Text style={styles.guidanceUnit}>kcal</Text>
+            </View>
+            <TouchableOpacity style={styles.saveFoodButton} onPress={saveMedicalGuidance}>
+              <Text style={styles.saveFoodButtonText}>指導値を保存</Text>
             </TouchableOpacity>
           </View>
 
@@ -987,4 +1055,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#000',
   },
+  guidanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  guidanceLabel: { flex: 1, fontSize: 14, color: '#333' },
+  guidanceInput: { width: 80, backgroundColor: '#f9f9f9', borderRadius: 8, padding: 8, fontSize: 16, textAlign: 'center', borderWidth: 1, borderColor: '#e0e0e0', color: '#333' },
+  guidanceUnit: { fontSize: 13, color: '#888', width: 40 },
 });

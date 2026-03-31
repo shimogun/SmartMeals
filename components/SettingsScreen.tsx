@@ -3,6 +3,7 @@ import {
   Modal,
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ScrollView,
   StyleSheet,
@@ -29,6 +30,20 @@ type SettingsData = {
   analytics: boolean;
 };
 
+const FOOD_CATEGORIES = {
+  mainIngredients: {
+    肉類: ['鶏むね肉', 'ささみ', '豚ヒレ肉', '牛もも肉', '鶏もも肉', '豚ロース', '鶏ひき肉', '豚ひき肉'],
+    魚介類: ['鮭', 'サバ', 'タラ', 'マグロ', 'エビ', 'イカ', 'カツオ', 'アジ', 'ブリ'],
+    大豆製品: ['豆腐', '厚揚げ', '納豆', '油揚げ', '豆乳', 'おから'],
+  },
+  sideIngredients: {
+    緑黄色野菜: ['ブロッコリー', 'ほうれん草', 'にんじん', 'パプリカ', 'トマト', 'かぼちゃ', '小松菜'],
+    淡色野菜: ['キャベツ', 'レタス', '大根', 'もやし', 'きゅうり', '玉ねぎ', 'なす'],
+    きのこ類: ['しめじ', 'えのき', 'エリンギ', 'まいたけ', 'しいたけ'],
+    海藻類: ['わかめ', 'ひじき', 'のり', 'もずく', '昆布'],
+  },
+};
+
 const defaultSettings: SettingsData = {
   notifications: true,
   darkMode: false,
@@ -39,12 +54,39 @@ const defaultSettings: SettingsData = {
   analytics: true,
 };
 
+type UserData = {
+  id: string;
+  name: string;
+  age: number;
+  avatar: string;
+  healthData?: {
+    height?: number;
+    weight?: number;
+    gender?: 'male' | 'female';
+    activityLevel?: 'light' | 'moderate' | 'high';
+  };
+};
+
 export default function SettingsScreen({ visible, onClose }: SettingsScreenProps) {
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editAge, setEditAge] = useState('');
+  const [editHeight, setEditHeight] = useState('');
+  const [editWeight, setEditWeight] = useState('');
+  const [editGender, setEditGender] = useState<'male' | 'female'>('male');
+  const [editActivity, setEditActivity] = useState<'light' | 'moderate' | 'high'>('moderate');
+  const [likedFoods, setLikedFoods] = useState<string[]>([]);
+  const [dislikedFoods, setDislikedFoods] = useState<string[]>([]);
+  const [showFoodModal, setShowFoodModal] = useState<'liked' | 'disliked' | null>(null);
 
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (visible) {
+      loadSettings();
+      loadUser();
+    }
+  }, [visible]);
 
   const loadSettings = async () => {
     try {
@@ -70,6 +112,107 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const toggleSetting = (key: keyof SettingsData) => {
     const newSettings = { ...settings, [key]: !settings[key] };
     saveSettings(newSettings);
+  };
+
+  const loadUser = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('users');
+      if (stored) {
+        const users = JSON.parse(stored);
+        const currentIndex = await AsyncStorage.getItem('currentUserIndex');
+        const index = currentIndex ? parseInt(currentIndex) : 0;
+        const currentUser = users[index] || users[0];
+        if (currentUser) {
+          setUser(currentUser);
+          if (currentUser.foodPreferences) {
+            setLikedFoods(currentUser.foodPreferences.liked || []);
+            setDislikedFoods(currentUser.foodPreferences.disliked || []);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('ユーザー読み込みエラー:', error);
+    }
+  };
+
+  const startEditProfile = () => {
+    if (!user) return;
+    setEditName(user.name);
+    setEditAge(user.age?.toString() || '');
+    setEditHeight(user.healthData?.height?.toString() || '');
+    setEditWeight(user.healthData?.weight?.toString() || '');
+    setEditGender(user.healthData?.gender || 'male');
+    setEditActivity(user.healthData?.activityLevel || 'moderate');
+    setEditingProfile(true);
+  };
+
+  const saveProfile = async () => {
+    if (!user) return;
+    if (!editName.trim()) {
+      Alert.alert('入力エラー', '名前を入力してください');
+      return;
+    }
+    try {
+      const stored = await AsyncStorage.getItem('users');
+      if (!stored) return;
+      const users = JSON.parse(stored);
+      const index = users.findIndex((u: UserData) => u.id === user.id);
+      if (index === -1) return;
+
+      users[index] = {
+        ...users[index],
+        name: editName.trim(),
+        age: parseInt(editAge) || user.age,
+        healthData: {
+          ...users[index].healthData,
+          height: editHeight ? parseFloat(editHeight) : undefined,
+          weight: editWeight ? parseFloat(editWeight) : undefined,
+          gender: editGender,
+          activityLevel: editActivity,
+        },
+      };
+
+      await AsyncStorage.setItem('users', JSON.stringify(users));
+      setUser(users[index]);
+      setEditingProfile(false);
+      Alert.alert('保存完了', 'プロフィールを更新しました');
+    } catch (error) {
+      console.error('プロフィール保存エラー:', error);
+      Alert.alert('エラー', '保存に失敗しました');
+    }
+  };
+
+  const saveFoodPreferences = async () => {
+    try {
+      const usersData = await AsyncStorage.getItem('users');
+      if (!usersData) return;
+      const users = JSON.parse(usersData);
+      const indexData = await AsyncStorage.getItem('currentUserIndex');
+      const index = indexData ? parseInt(indexData) : 0;
+
+      if (users[index]) {
+        users[index].foodPreferences = {
+          liked: likedFoods,
+          disliked: dislikedFoods,
+        };
+        await AsyncStorage.setItem('users', JSON.stringify(users));
+        Alert.alert('保存完了', '食材の好みを更新しました');
+      }
+    } catch {
+      Alert.alert('エラー', '保存に失敗しました');
+    }
+  };
+
+  const toggleFoodPreference = (food: string, type: 'liked' | 'disliked') => {
+    if (type === 'liked') {
+      setLikedFoods(prev =>
+        prev.includes(food) ? prev.filter(f => f !== food) : [...prev, food]
+      );
+    } else {
+      setDislikedFoods(prev =>
+        prev.includes(food) ? prev.filter(f => f !== food) : [...prev, food]
+      );
+    }
   };
 
   const handleDataExport = () => {
@@ -136,6 +279,169 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
         </View>
 
         <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* ユーザー情報 */}
+          {user && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>👤 アカウント</Text>
+
+              {!editingProfile ? (
+                <>
+                  <View style={styles.profileCard}>
+                    <Text style={styles.profileAvatar}>{user.avatar}</Text>
+                    <View style={styles.profileInfo}>
+                      <Text style={styles.profileName}>{user.name}</Text>
+                      <Text style={styles.profileSub}>{user.age}歳</Text>
+                    </View>
+                    <TouchableOpacity onPress={startEditProfile} style={styles.profileEditButton}>
+                      <Ionicons name="pencil" size={18} color="#007AFF" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.loginHint}>
+                    <Ionicons name="log-in-outline" size={18} color="#8E8E93" />
+                    <Text style={styles.loginHintText}>Google / メールログインは今後対応予定</Text>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.editForm}>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>名前</Text>
+                    <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="名前" placeholderTextColor="#999" />
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>年齢</Text>
+                    <TextInput style={styles.editInput} value={editAge} onChangeText={setEditAge} placeholder="30" keyboardType="numeric" placeholderTextColor="#999" />
+                  </View>
+                  <View style={styles.editActions}>
+                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingProfile(false)}>
+                      <Text style={styles.cancelBtnText}>キャンセル</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
+                      <Text style={styles.saveBtnText}>保存</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* 食材の好み */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>🥦 食材の好み</Text>
+
+            {/* 好きな食材 */}
+            <View style={styles.settingItem}>
+              <View style={styles.settingLeft}>
+                <Text style={styles.settingLabel}>好きな食材</Text>
+              </View>
+            </View>
+            <View style={styles.foodTagsContainer}>
+              {likedFoods.length === 0 && (
+                <Text style={styles.emptyFoodText}>未設定</Text>
+              )}
+              {likedFoods.map(food => (
+                <TouchableOpacity
+                  key={food}
+                  style={[styles.foodTag, styles.foodTagLiked]}
+                  onPress={() => toggleFoodPreference(food, 'liked')}
+                >
+                  <Text style={styles.foodTagText}>{food} ✕</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.addFoodButton}
+                onPress={() => setShowFoodModal('liked')}
+              >
+                <Ionicons name="add" size={18} color="#007AFF" />
+              </TouchableOpacity>
+            </View>
+
+            {/* 苦手な食材 */}
+            <View style={[styles.settingItem, { marginTop: 8 }]}>
+              <View style={styles.settingLeft}>
+                <Text style={styles.settingLabel}>苦手な食材</Text>
+              </View>
+            </View>
+            <View style={styles.foodTagsContainer}>
+              {dislikedFoods.length === 0 && (
+                <Text style={styles.emptyFoodText}>未設定</Text>
+              )}
+              {dislikedFoods.map(food => (
+                <TouchableOpacity
+                  key={food}
+                  style={[styles.foodTag, styles.foodTagDisliked]}
+                  onPress={() => toggleFoodPreference(food, 'disliked')}
+                >
+                  <Text style={styles.foodTagText}>{food} ✕</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.addFoodButton}
+                onPress={() => setShowFoodModal('disliked')}
+              >
+                <Ionicons name="add" size={18} color="#007AFF" />
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity style={styles.saveFoodButton} onPress={saveFoodPreferences}>
+              <Text style={styles.saveFoodButtonText}>食材の好みを保存</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* 食材選択モーダル */}
+          <Modal
+            visible={showFoodModal !== null}
+            animationType="slide"
+            transparent
+            onRequestClose={() => setShowFoodModal(null)}
+          >
+            <View style={styles.foodModalOverlay}>
+              <View style={styles.foodModalContent}>
+                <View style={styles.foodModalHeader}>
+                  <Text style={styles.foodModalTitle}>
+                    {showFoodModal === 'liked' ? '好きな食材を選択' : '苦手な食材を選択'}
+                  </Text>
+                  <TouchableOpacity onPress={() => setShowFoodModal(null)}>
+                    <Ionicons name="close" size={24} color="#007AFF" />
+                  </TouchableOpacity>
+                </View>
+                <ScrollView showsVerticalScrollIndicator={false}>
+                  {Object.entries(FOOD_CATEGORIES).map(([groupKey, categories]) => (
+                    <View key={groupKey}>
+                      {Object.entries(categories).map(([categoryName, foods]) => (
+                        <View key={categoryName}>
+                          <Text style={styles.foodCategoryLabel}>{categoryName}</Text>
+                          <View style={styles.foodGrid}>
+                            {foods.map(food => {
+                              const isSelected = showFoodModal === 'liked'
+                                ? likedFoods.includes(food)
+                                : dislikedFoods.includes(food);
+                              return (
+                                <TouchableOpacity
+                                  key={food}
+                                  style={[
+                                    styles.foodChip,
+                                    isSelected && (showFoodModal === 'liked' ? styles.foodChipLiked : styles.foodChipDisliked),
+                                  ]}
+                                  onPress={() => toggleFoodPreference(food, showFoodModal!)}
+                                >
+                                  <Text style={[styles.foodChipText, isSelected && styles.foodChipTextSelected]}>
+                                    {food}
+                                  </Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                  <View style={{ height: 40 }} />
+                </ScrollView>
+              </View>
+            </View>
+          </Modal>
+
           {/* 通知設定 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>🔔 通知</Text>
@@ -406,5 +712,279 @@ const styles = StyleSheet.create({
   copyrightText: {
     fontSize: 11,
     color: '#8E8E93',
+  },
+  // ユーザー情報
+  profileCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E5EA',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+  },
+  profileAvatar: {
+    fontSize: 36,
+    marginRight: 14,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#000',
+  },
+  profileSub: {
+    fontSize: 14,
+    color: '#8E8E93',
+    marginTop: 2,
+  },
+  profileEditButton: {
+    padding: 8,
+  },
+  healthSummary: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  healthItem: {
+    fontSize: 13,
+    color: '#666',
+  },
+  loginHint: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+  },
+  loginHintText: {
+    fontSize: 13,
+    color: '#8E8E93',
+    marginLeft: 8,
+  },
+  // 編集フォーム
+  editForm: {
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderTopWidth: 0.5,
+    borderTopColor: '#E5E5EA',
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+  },
+  editRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  editLabel: {
+    width: 50,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  editInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    fontSize: 16,
+    color: '#333',
+    backgroundColor: '#f8f9fa',
+  },
+  editUnit: {
+    fontSize: 14,
+    color: '#666',
+    marginLeft: 8,
+    width: 28,
+  },
+  toggleRow: {
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+  },
+  toggleButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  toggleButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  toggleText: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '600',
+  },
+  toggleTextActive: {
+    color: '#fff',
+  },
+  editActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 4,
+  },
+  cancelBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+  },
+  cancelBtnText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '600',
+  },
+  saveBtn: {
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    backgroundColor: '#007AFF',
+  },
+  saveBtnText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // 食材の好み
+  foodTagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+    alignItems: 'center',
+  },
+  foodTag: {
+    borderRadius: 16,
+    paddingVertical: 5,
+    paddingHorizontal: 12,
+  },
+  foodTagLiked: {
+    backgroundColor: '#E8F5E9',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
+  foodTagDisliked: {
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#F44336',
+  },
+  foodTagText: {
+    fontSize: 13,
+    color: '#333',
+    fontWeight: '500',
+  },
+  emptyFoodText: {
+    fontSize: 13,
+    color: '#8E8E93',
+    fontStyle: 'italic',
+  },
+  addFoodButton: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#F0F0F0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  saveFoodButton: {
+    margin: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#007AFF',
+    alignItems: 'center',
+  },
+  saveFoodButtonText: {
+    fontSize: 15,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // 食材選択モーダル
+  foodModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  foodModalContent: {
+    backgroundColor: '#F2F2F7',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    maxHeight: '80%',
+    paddingBottom: 20,
+  },
+  foodModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderBottomWidth: 0.5,
+    borderBottomColor: '#E5E5EA',
+  },
+  foodModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#000',
+  },
+  foodCategoryLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#8E8E93',
+    marginTop: 16,
+    marginBottom: 8,
+    marginLeft: 16,
+    textTransform: 'uppercase',
+  },
+  foodGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    paddingHorizontal: 16,
+  },
+  foodChip: {
+    borderRadius: 16,
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#E0E0E0',
+  },
+  foodChipLiked: {
+    backgroundColor: '#E8F5E9',
+    borderColor: '#4CAF50',
+  },
+  foodChipDisliked: {
+    backgroundColor: '#FFEBEE',
+    borderColor: '#F44336',
+  },
+  foodChipText: {
+    fontSize: 13,
+    color: '#333',
+  },
+  foodChipTextSelected: {
+    fontWeight: '600',
+    color: '#000',
   },
 });

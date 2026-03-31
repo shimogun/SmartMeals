@@ -9,10 +9,12 @@ import {
   Alert,
   Modal,
   RefreshControl,
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { User, GlucoseRecord, GeneratedMeal, SavedMealPlan, MealTiming } from '../../types';
+import { LineChart } from 'react-native-chart-kit';
+import { User, GlucoseRecord, GeneratedMeal, SavedMealPlan, MealTiming, WeeklyRecord } from '../../types';
 import DailyNutritionSummary from '../../components/DailyNutritionSummary';
 import mealStorageService from '../../services/mealStorageService';
 import localMealEngine from '../../services/localMealEngine';
@@ -46,6 +48,13 @@ export default function DashboardScreen() {
   // Meal update
   const [updateMessage, setUpdateMessage] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+
+  // Trend modal
+  const [showTrendModal, setShowTrendModal] = useState(false);
+  const [trendRange, setTrendRange] = useState<'1week' | '1month' | '3months' | '6months'>('1month');
+  const [trendFilters, setTrendFilters] = useState<Set<MealTiming>>(new Set(['朝', '昼', '夜']));
+  const [allGlucoseRecords, setAllGlucoseRecords] = useState<GlucoseRecord[]>([]);
+  const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -85,6 +94,7 @@ export default function DashboardScreen() {
       const glucoseData = await AsyncStorage.getItem('glucose_records');
       if (glucoseData) {
         const records: GlucoseRecord[] = JSON.parse(glucoseData);
+        setAllGlucoseRecords(records);
         if (records.length > 0) {
           const sorted = records.sort((a, b) => b.timestamp - a.timestamp);
           setLatestGlucose(sorted[0]);
@@ -99,6 +109,11 @@ export default function DashboardScreen() {
             break;
           }
         }
+      }
+
+      const weeklyData = await AsyncStorage.getItem('weekly_records');
+      if (weeklyData) {
+        setWeeklyRecords(JSON.parse(weeklyData));
       }
 
       generateUpdateMessage();
@@ -296,6 +311,103 @@ export default function DashboardScreen() {
     }
   };
 
+  const toggleTrendFilter = (timing: MealTiming) => {
+    const newFilters = new Set(trendFilters);
+    if (newFilters.has(timing)) {
+      if (newFilters.size > 1) {
+        newFilters.delete(timing);
+      }
+    } else {
+      newFilters.add(timing);
+    }
+    setTrendFilters(newFilters);
+  };
+
+  const getFilteredTrendRecords = (): GlucoseRecord[] => {
+    const now = new Date();
+    let cutoff: Date;
+    switch (trendRange) {
+      case '1week':
+        cutoff = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case '1month':
+        cutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case '3months':
+        cutoff = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      case '6months':
+        cutoff = new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000);
+        break;
+    }
+
+    return allGlucoseRecords
+      .filter(r => new Date(r.timestamp) >= cutoff)
+      .filter(r => trendFilters.has(r.mealType as MealTiming))
+      .sort((a, b) => a.timestamp - b.timestamp);
+  };
+
+  const getTrendChartData = () => {
+    const records = getFilteredTrendRecords();
+    if (records.length === 0) {
+      return { labels: [''], datasets: [{ data: [0] }] };
+    }
+
+    const dateMap = new Map<string, number[]>();
+    for (const r of records) {
+      const date = r.date;
+      if (!dateMap.has(date)) dateMap.set(date, []);
+      dateMap.get(date)!.push(r.value);
+    }
+
+    const dates = Array.from(dateMap.keys()).sort();
+    const step = Math.max(1, Math.floor(dates.length / 10));
+    const labels = dates.map((d, i) => i % step === 0 ? d.slice(5) : '');
+    const data = dates.map(d => {
+      const values = dateMap.get(d)!;
+      return Math.round(values.reduce((s, v) => s + v, 0) / values.length);
+    });
+
+    return {
+      labels,
+      datasets: [{ data, strokeWidth: 2 }],
+    };
+  };
+
+  const getTrendStats = () => {
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const twoWeeksAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    const thisWeek = allGlucoseRecords.filter(
+      r => new Date(r.timestamp) >= oneWeekAgo
+    );
+    const lastWeek = allGlucoseRecords.filter(
+      r => new Date(r.timestamp) >= twoWeeksAgo && new Date(r.timestamp) < oneWeekAgo
+    );
+
+    const thisAvg = thisWeek.length > 0
+      ? Math.round(thisWeek.reduce((s, r) => s + r.value, 0) / thisWeek.length)
+      : null;
+    const lastAvg = lastWeek.length > 0
+      ? Math.round(lastWeek.reduce((s, r) => s + r.value, 0) / lastWeek.length)
+      : null;
+
+    return { thisAvg, lastAvg };
+  };
+
+  const getHba1cHistory = (): { date: string; value: number }[] => {
+    return weeklyRecords
+      .filter(r => r.hba1c != null)
+      .sort((a, b) => a.timestamp - b.timestamp)
+      .map(r => ({
+        date: r.weekStart,
+        value: r.hba1c!,
+      }));
+  };
+
+  const screenWidth = Dimensions.get('window').width;
+
   return (
     <ScrollView
       style={styles.container}
@@ -348,6 +460,13 @@ export default function DashboardScreen() {
             直近: {latestGlucose.value} mg/dL（{latestGlucose.mealType}）
           </Text>
         )}
+        <TouchableOpacity
+          style={styles.trendLink}
+          onPress={() => setShowTrendModal(true)}
+        >
+          <Text style={styles.trendLinkText}>トレンドを見る</Text>
+          <Ionicons name="chevron-forward" size={16} color="#007AFF" />
+        </TouchableOpacity>
       </View>
 
       {/* Weight/BP accordion */}
@@ -501,6 +620,137 @@ export default function DashboardScreen() {
                 ))}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Trend modal */}
+      <Modal visible={showTrendModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '90%' }]}>
+            <View style={styles.trendHeader}>
+              <Text style={styles.trendTitle}>血糖値トレンド</Text>
+              <TouchableOpacity onPress={() => setShowTrendModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView>
+              {/* Period selector */}
+              <View style={styles.trendPeriodRow}>
+                {([
+                  { key: '1week', label: '1週' },
+                  { key: '1month', label: '1ヶ月' },
+                  { key: '3months', label: '3ヶ月' },
+                  { key: '6months', label: '6ヶ月' },
+                ] as const).map(p => (
+                  <TouchableOpacity
+                    key={p.key}
+                    style={[styles.trendPeriodButton, trendRange === p.key && styles.trendPeriodButtonActive]}
+                    onPress={() => setTrendRange(p.key)}
+                  >
+                    <Text style={[styles.trendPeriodText, trendRange === p.key && styles.trendPeriodTextActive]}>
+                      {p.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Chart */}
+              {getFilteredTrendRecords().length > 0 ? (
+                <LineChart
+                  data={getTrendChartData()}
+                  width={screenWidth - 60}
+                  height={220}
+                  chartConfig={{
+                    backgroundColor: '#fff',
+                    backgroundGradientFrom: '#fff',
+                    backgroundGradientTo: '#fff',
+                    decimalPlaces: 0,
+                    color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
+                    labelColor: (opacity = 1) => `rgba(102, 102, 102, ${opacity})`,
+                    propsForDots: { r: '3', strokeWidth: '1', stroke: '#2196F3' },
+                  }}
+                  bezier
+                  style={{ borderRadius: 8, marginVertical: 8 }}
+                />
+              ) : (
+                <Text style={styles.emptyText}>選択期間にデータがありません</Text>
+              )}
+
+              {/* Meal timing filter */}
+              <View style={styles.trendFilterRow}>
+                {(['朝', '昼', '夜'] as MealTiming[]).map(timing => (
+                  <TouchableOpacity
+                    key={timing}
+                    style={[styles.trendFilterChip, trendFilters.has(timing) && styles.trendFilterChipActive]}
+                    onPress={() => toggleTrendFilter(timing)}
+                  >
+                    <Text style={[styles.trendFilterText, trendFilters.has(timing) && styles.trendFilterTextActive]}>
+                      {timing}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* Stats */}
+              {(() => {
+                const stats = getTrendStats();
+                return (
+                  <View style={styles.trendStatsCard}>
+                    <Text style={styles.trendStatsTitle}>平均値</Text>
+                    <View style={styles.trendStatsRow}>
+                      <View style={styles.trendStatItem}>
+                        <Text style={styles.trendStatLabel}>今週</Text>
+                        <Text style={styles.trendStatValue}>
+                          {stats.thisAvg != null ? `${stats.thisAvg} mg/dL` : '—'}
+                        </Text>
+                      </View>
+                      <View style={styles.trendStatItem}>
+                        <Text style={styles.trendStatLabel}>先週</Text>
+                        <Text style={styles.trendStatValue}>
+                          {stats.lastAvg != null ? `${stats.lastAvg} mg/dL` : '—'}
+                        </Text>
+                      </View>
+                      {stats.thisAvg != null && stats.lastAvg != null && (
+                        <View style={styles.trendStatItem}>
+                          <Text style={styles.trendStatLabel}>変化</Text>
+                          <Text style={[
+                            styles.trendStatValue,
+                            { color: stats.thisAvg <= stats.lastAvg ? '#4CAF50' : '#F44336' },
+                          ]}>
+                            {stats.thisAvg <= stats.lastAvg ? '↓' : '↑'}
+                            {Math.abs(stats.thisAvg - stats.lastAvg)} mg/dL
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  </View>
+                );
+              })()}
+
+              {/* HbA1c history */}
+              {(() => {
+                const history = getHba1cHistory();
+                if (history.length === 0) return null;
+                return (
+                  <View style={styles.trendStatsCard}>
+                    <Text style={styles.trendStatsTitle}>HbA1c推移</Text>
+                    <View style={styles.hba1cRow}>
+                      {history.slice(-6).map((h, i, arr) => (
+                        <View key={i} style={styles.hba1cItem}>
+                          <Text style={styles.hba1cValue}>{h.value}</Text>
+                          <Text style={styles.hba1cDate}>{h.date.slice(5)}</Text>
+                          {i < arr.length - 1 && (
+                            <Text style={styles.hba1cArrow}>→</Text>
+                          )}
+                        </View>
+                      ))}
+                    </View>
+                  </View>
+                );
+              })()}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -766,5 +1016,127 @@ const styles = StyleSheet.create({
     color: '#555',
     marginBottom: 6,
     lineHeight: 20,
+  },
+  trendLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 2,
+  },
+  trendLinkText: {
+    fontSize: 14,
+    color: '#007AFF',
+  },
+  trendHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  trendTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  trendPeriodRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginBottom: 12,
+  },
+  trendPeriodButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+  },
+  trendPeriodButtonActive: {
+    backgroundColor: '#007AFF',
+  },
+  trendPeriodText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  trendPeriodTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  trendFilterRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginVertical: 12,
+  },
+  trendFilterChip: {
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  trendFilterChipActive: {
+    backgroundColor: '#2196F3',
+  },
+  trendFilterText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  trendFilterTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  trendStatsCard: {
+    backgroundColor: '#f9f9f9',
+    borderRadius: 10,
+    padding: 14,
+    marginTop: 12,
+  },
+  trendStatsTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 10,
+  },
+  trendStatsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  trendStatItem: {
+    alignItems: 'center',
+  },
+  trendStatLabel: {
+    fontSize: 12,
+    color: '#888',
+    marginBottom: 4,
+  },
+  trendStatValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+  },
+  hba1cRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  hba1cItem: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  hba1cValue: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  hba1cDate: {
+    fontSize: 11,
+    color: '#888',
+  },
+  hba1cArrow: {
+    fontSize: 16,
+    color: '#ccc',
+    marginHorizontal: 4,
   },
 });

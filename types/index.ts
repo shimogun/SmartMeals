@@ -83,6 +83,7 @@ export interface UserHealthProfile {
   weight?: number;
   likedFoods?: string[];
   dislikedFoods?: string[];
+  preferLowGi?: boolean;
 }
 
 export type TimeRange = '1week' | '1month' | '3months';

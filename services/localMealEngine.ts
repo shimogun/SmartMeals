@@ -511,6 +511,24 @@ class LocalMealEngine {
       }
     }
 
+    // 糖質上限フィルタリング（1食あたり = 1日上限の1/3）
+    if (profile.dailyCarbLimit) {
+      const perMealLimit = profile.dailyCarbLimit / 3;
+      const carbFiltered = filtered.filter(meal => meal.baseCarbs <= perMealLimit);
+      if (carbFiltered.length >= 3) {
+        filtered = carbFiltered;
+      }
+    }
+
+    // カロリー上限フィルタリング（1食あたり = 1日上限の1/3）
+    if (profile.dailyCalorieLimit) {
+      const perMealLimit = profile.dailyCalorieLimit / 3;
+      const calFiltered = filtered.filter(meal => meal.baseCalories <= perMealLimit);
+      if (calFiltered.length >= 3) {
+        filtered = calFiltered;
+      }
+    }
+
     // フィルタ後にテンプレートが0件にならないよう最低1件は確保
     if (filtered.length === 0) {
       filtered = templates.slice(0, 1);

@@ -9,7 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import secureAiService, { UserHealthProfile } from '../../services/secureAiService';
 import localMealEngine from '../../services/localMealEngine';
-import mealStorageService, { SavedMealPlan } from '../../services/mealStorageService';
+import mealStorageService from '../../services/mealStorageService';
+import { SavedMealPlan } from '../../types';
 
 // 型定義
 interface GlucoseRecord {
@@ -82,6 +83,9 @@ export default function TwoScreen() {
   const [showSavedPlansModal, setShowSavedPlansModal] = useState(false);
   const [selectedSavedPlan, setSelectedSavedPlan] = useState<SavedMealPlan | null>(null);
 
+  // お気に入り
+  const [favoriteMealIds, setFavoriteMealIds] = useState<Set<string>>(new Set());
+
   // 食材データ
   const mainCourses = [
     '白米',
@@ -136,6 +140,7 @@ export default function TwoScreen() {
     loadUsers();
     loadRecords();
     loadSavedMealPlans();
+    loadFavorites();
   }, []);
 
   const loadUsers = async () => {
@@ -181,6 +186,28 @@ export default function TwoScreen() {
     } catch (error) {
       console.error('❌ 保存献立プラン読み込みエラー:', error);
     }
+  };
+
+  // お気に入り読み込み
+  const loadFavorites = async () => {
+    try {
+      const stored = await AsyncStorage.getItem('favorite_meal_ids');
+      if (stored) setFavoriteMealIds(new Set(JSON.parse(stored)));
+    } catch (error) {
+      console.error('お気に入り読み込みエラー:', error);
+    }
+  };
+
+  // お気に入りトグル
+  const toggleFavorite = async (mealId: string) => {
+    const updated = new Set(favoriteMealIds);
+    if (updated.has(mealId)) {
+      updated.delete(mealId);
+    } else {
+      updated.add(mealId);
+    }
+    setFavoriteMealIds(updated);
+    await AsyncStorage.setItem('favorite_meal_ids', JSON.stringify([...updated]));
   };
 
   // ユーザー変更時に保存済み献立プランも更新
@@ -403,6 +430,30 @@ export default function TwoScreen() {
             <Text style={styles.recordButtonText}>献立を生成</Text>
           </TouchableOpacity>
 
+          {/* 保存済み献立を全削除（デバッグ用） */}
+          {savedMealPlans.length > 0 && (
+            <TouchableOpacity
+              style={{ backgroundColor: '#FF3B30', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginBottom: 10 }}
+              onPress={() => {
+                Alert.alert(
+                  '全削除',
+                  `保存済み献立${savedMealPlans.length}件を全て削除しますか？`,
+                  [
+                    { text: 'キャンセル', style: 'cancel' },
+                    { text: '全削除', style: 'destructive', onPress: async () => {
+                      await mealStorageService.clearAllMealPlans();
+                      setSavedMealPlans([]);
+                      setGeneratedMeals({});
+                      Alert.alert('完了', '全ての献立プランを削除しました');
+                    }},
+                  ]
+                );
+              }}
+            >
+              <Text style={{ color: '#fff', fontSize: 16, fontWeight: 'bold' }}>保存済み献立を全削除（{savedMealPlans.length}件）</Text>
+            </TouchableOpacity>
+          )}
+
           {/* 保存済み献立プランボタン */}
           {(() => {
             const hasData = savedMealPlans && savedMealPlans.length > 0;
@@ -481,14 +532,14 @@ export default function TwoScreen() {
       const userProfile = await createUserProfile();
       const periodDays = 1; // 1日分
       const servings = 1;
-      
-      let generatedMeals: {[key: string]: GeneratedMeal[]} = {};
-      
+
+      let newMeals: {[key: string]: GeneratedMeal[]} = {};
+
       // まずChatGPT APIを試行
       if (secureAiService.isAvailable()) {
         try {
           console.log('🤖 ChatGPT APIで献立生成中...');
-          generatedMeals = await secureAiService.generateMeals(
+          newMeals = await secureAiService.generateMeals(
             userProfile,
             periodDays,
             servings,
@@ -496,7 +547,7 @@ export default function TwoScreen() {
           );
         } catch (apiError) {
           console.warn('ChatGPT API失敗、ローカルエンジンにフォールバック:', apiError);
-          generatedMeals = await localMealEngine.generatePersonalizedMeals(
+          newMeals = await localMealEngine.generatePersonalizedMeals(
             userProfile,
             periodDays,
             servings,
@@ -506,22 +557,22 @@ export default function TwoScreen() {
       } else {
         // APIキーが設定されていない場合はローカルエンジンを使用
         console.log('🏠 ローカルエンジンで献立生成中...');
-        generatedMeals = await localMealEngine.generatePersonalizedMeals(
+        newMeals = await localMealEngine.generatePersonalizedMeals(
           userProfile,
           periodDays,
           servings,
           new Date()
         );
       }
-      
-      setGeneratedMeals(generatedMeals);
+
+      setGeneratedMeals(newMeals);
       
       // 献立プランを自動保存
       try {
-        if (selectedUserId && Object.keys(generatedMeals).length > 0) {
+        if (selectedUserId && Object.keys(newMeals).length > 0) {
           await mealStorageService.saveMealPlan(
             selectedUserId,
-            generatedMeals,
+            newMeals,
             userProfile,
             periodDays,
             new Date()
@@ -567,13 +618,23 @@ export default function TwoScreen() {
       return (
         <View style={styles.stepContainer}>
           <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setSelectedMealDetail(null)}
               style={{ padding: 8, marginRight: 10 }}
             >
               <Ionicons name="arrow-back" size={24} color="#007AFF" />
             </TouchableOpacity>
-            <Text style={styles.sectionTitle}>{selectedMealDetail.name}</Text>
+            <Text style={[styles.sectionTitle, { flex: 1 }]} numberOfLines={2}>{selectedMealDetail.name}</Text>
+            <TouchableOpacity
+              onPress={() => toggleFavorite(selectedMealDetail.id)}
+              style={{ padding: 8 }}
+            >
+              <Ionicons
+                name={favoriteMealIds.has(selectedMealDetail.id) ? 'heart' : 'heart-outline'}
+                size={26}
+                color={favoriteMealIds.has(selectedMealDetail.id) ? '#FF3B30' : '#ccc'}
+              />
+            </TouchableOpacity>
           </View>
           
           <View style={{ flex: 1 }}>
@@ -697,7 +758,18 @@ export default function TwoScreen() {
                   <View style={{ marginBottom: 12 }}>
                     <View style={{ flex: 1 }}>
                       <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 }}>{meal.name}</Text>
+                        <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333', flex: 1 }} numberOfLines={2}>{meal.name}</Text>
+                        <TouchableOpacity
+                          onPress={(e) => { e.stopPropagation(); toggleFavorite(meal.id); }}
+                          style={{ padding: 4, marginLeft: 8 }}
+                          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                        >
+                          <Ionicons
+                            name={favoriteMealIds.has(meal.id) ? 'heart' : 'heart-outline'}
+                            size={22}
+                            color={favoriteMealIds.has(meal.id) ? '#FF3B30' : '#ccc'}
+                          />
+                        </TouchableOpacity>
                         <Ionicons name="chevron-forward" size={20} color="#007AFF" />
                       </View>
                       <Text style={{ fontSize: 14, color: '#666', marginBottom: 8, lineHeight: 20 }}>{meal.description}</Text>
@@ -724,12 +796,27 @@ export default function TwoScreen() {
     );
   };
 
+  // ステップ2に入ったら古いデータをクリアして1回だけ献立生成を実行
+  const hasTriggeredGeneration = useRef(false);
+  useEffect(() => {
+    if (currentStep === 2) {
+      if (!hasTriggeredGeneration.current) {
+        hasTriggeredGeneration.current = true;
+        setGeneratedMeals({});
+        setSelectedMealDetail(null);
+        const timer = setTimeout(generatePeriodMeals, 1000);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      hasTriggeredGeneration.current = false;
+    }
+  }, [currentStep]);
+
   // レンダリング部分
   let mainContent;
   if (currentStep === 1) {
     mainContent = renderStep1();
   } else if (currentStep === 2) {
-    setTimeout(generatePeriodMeals, 1000);
     mainContent = renderStep2();
   } else if (currentStep === 3) {
     mainContent = renderStep3();

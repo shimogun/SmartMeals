@@ -1,30 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { UserHealthProfile } from './secureAiService';
-
-// 保存された献立データの型定義
-export interface SavedMealPlan {
-  id: string;
-  userId: string;
-  createdAt: number;
-  period: number; // 日数
-  startDate: string; // YYYY-MM-DD
-  meals: {[date: string]: GeneratedMeal[]};
-  userProfile: UserHealthProfile; // 生成時のプロフィール
-  name?: string; // 献立プランの名前（任意）
-}
-
-export interface GeneratedMeal {
-  id: string;
-  name: string;
-  calories: number;
-  carbs: number;
-  protein: number;
-  fat: number;
-  description: string;
-  ingredients: string[];
-  recipe: string[];
-  servings: number;
-}
+import { SavedMealPlan, GeneratedMeal, UserHealthProfile } from '../types';
 
 class MealStorageService {
   private readonly STORAGE_KEY = 'saved_meal_plans';
@@ -36,7 +11,8 @@ class MealStorageService {
     userProfile: UserHealthProfile,
     period: number = 7,
     startDate: Date = new Date(),
-    name?: string
+    name?: string,
+    glucoseAtGeneration?: number
   ): Promise<SavedMealPlan> {
     try {
       const savedPlan: SavedMealPlan = {
@@ -47,7 +23,8 @@ class MealStorageService {
         startDate: startDate.toISOString().split('T')[0], // YYYY-MM-DD
         meals,
         userProfile,
-        name: name || `献立プラン ${new Date().toLocaleDateString('ja-JP')}`
+        name: name || `献立プラン ${new Date().toLocaleDateString('ja-JP')}`,
+        glucoseAtGeneration,
       };
 
       // 既存の献立プランを取得

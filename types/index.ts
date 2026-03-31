@@ -40,6 +40,13 @@ export interface User {
     disliked: string[];
   };
   onboardingCompleted: boolean;
+  medicalGuidance?: {
+    targetHba1c?: number;
+    glucoseMin?: number;
+    glucoseMax?: number;
+    dailyCarbLimit?: number;
+    dailyCalorieLimit?: number;
+  };
 }
 
 export interface GeneratedMeal {
@@ -84,6 +91,8 @@ export interface UserHealthProfile {
   likedFoods?: string[];
   dislikedFoods?: string[];
   preferLowGi?: boolean;
+  dailyCarbLimit?: number;
+  dailyCalorieLimit?: number;
 }
 
 export type TimeRange = '1week' | '1month' | '3months';

@@ -1,41 +1,9 @@
 // SmartMeals ローカル献立生成エンジン - API不要のルールベース生成
 import AsyncStorage from '@react-native-async-storage/async-storage';
-
-export interface UserHealthProfile {
-  // 基本健康データ
-  height?: number;
-  weight?: number;
-  gender?: 'male' | 'female';
-  activityLevel?: 'light' | 'moderate' | 'high';
-  age?: number;
-  
-  // 変動データ
-  currentHba1c?: string;
-  currentCondition?: 'good' | 'normal' | 'poor';
-  dietRestriction?: 'strict' | 'normal' | 'relaxed';
-  currentGlucose?: number;
-  mealType?: string;
-  
-  // 食材選択データ（複数選択対応）
-  preferredMainCourses?: string[];
-  preferredMainIngredients?: string[];
-  preferredSideIngredients?: string[];
-}
-
-export interface GeneratedMeal {
-  id: string;
-  name: string;
-  calories: number;
-  carbs: number;
-  protein: number;
-  fat: number;
-  description: string;
-  ingredients: string[];
-  recipe: string[];
-  servings: number;
-}
+import { UserHealthProfile, GeneratedMeal } from '../types';
 
 interface MealTemplate {
+  id: string;
   name: string;
   baseCalories: number;
   baseCarbs: number;
@@ -62,6 +30,7 @@ class LocalMealEngine {
     this.mealTemplates = [
       // 朝食メニュー（SmartMealsルール準拠：健康的調理法のみ）
       {
+        id: 'breakfast-01',
         name: '鶏むね肉の蒸し焼き',
         baseCalories: 280,
         baseCarbs: 8,
@@ -86,6 +55,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'breakfast-02',
         name: '鮭の塩焼き',
         baseCalories: 290,
         baseCarbs: 5,
@@ -110,6 +80,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'breakfast-03',
         name: 'アボカド納豆トースト',
         baseCalories: 320,
         baseCarbs: 25,
@@ -133,6 +104,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'breakfast-04',
         name: 'ギリシャヨーグルトパフェ',
         baseCalories: 250,
         baseCarbs: 20,
@@ -157,6 +129,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'breakfast-05',
         name: '豆腐スクランブルエッグ',
         baseCalories: 260,
         baseCarbs: 10,
@@ -183,6 +156,7 @@ class LocalMealEngine {
 
       // 昼食メニュー
       {
+        id: 'lunch-01',
         name: 'キノコたっぷりサラダ',
         baseCalories: 220,
         baseCarbs: 15,
@@ -208,6 +182,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'lunch-02',
         name: '豆腐ハンバーグ定食',
         baseCalories: 350,
         baseCarbs: 25,
@@ -233,6 +208,7 @@ class LocalMealEngine {
         difficulty: 'medium'
       },
       {
+        id: 'lunch-03',
         name: 'お魚のカルパッチョ',
         baseCalories: 280,
         baseCarbs: 8,
@@ -260,6 +236,7 @@ class LocalMealEngine {
 
       // 夕食メニュー
       {
+        id: 'dinner-01',
         name: '白身魚の蒸し焼き',
         baseCalories: 300,
         baseCarbs: 12,
@@ -286,6 +263,7 @@ class LocalMealEngine {
         difficulty: 'easy'
       },
       {
+        id: 'dinner-02',
         name: '鶏むね肉のグリル',
         baseCalories: 320,
         baseCarbs: 10,
@@ -313,6 +291,7 @@ class LocalMealEngine {
         difficulty: 'medium'
       },
       {
+        id: 'dinner-03',
         name: '豆腐ステーキきのこあんかけ',
         baseCalories: 280,
         baseCarbs: 18,
@@ -345,63 +324,66 @@ class LocalMealEngine {
     userProfile: UserHealthProfile,
     periodDays: number,
     servings: number,
-    startDate?: Date
+    startDate?: Date,
+    favoriteIds?: string[]
   ): Promise<{[key: string]: GeneratedMeal[]}> {
-    
+
     const weeklyMeals: {[key: string]: GeneratedMeal[]} = {};
     const baseDate = startDate || new Date();
-    
+
     // ユーザープロフィールを分析
     const nutritionMultipliers = this.calculateNutritionMultipliers(userProfile);
-    const filteredMeals = this.filterMealsForUser(userProfile);
-    
+    const filteredMeals = this.filterMealsForUser(this.mealTemplates, userProfile);
+
     console.log(`🏠 ローカルエンジン: ${periodDays}日分の献立生成開始`);
-    
+
+    const usedIds = new Set<string>();
+
     for (let i = 0; i < periodDays; i++) {
       const currentDate = new Date(baseDate);
       currentDate.setDate(baseDate.getDate() + i);
       const dateKey = currentDate.toISOString().split('T')[0];
-      
+
       console.log(`📅 ${i + 1}日目 (${dateKey}) の献立生成中...`);
-      
+
       const dailyMeals: GeneratedMeal[] = [];
-      
+
       // 朝食
-      const breakfast = this.selectMeal(filteredMeals, 'breakfast', i);
+      const breakfast = this.selectMeal(filteredMeals, 'breakfast', usedIds, favoriteIds);
       dailyMeals.push(this.createMealFromTemplate(
-        breakfast, 
-        `${i}-breakfast`, 
-        nutritionMultipliers, 
-        servings, 
+        breakfast,
+        `${i}-breakfast`,
+        nutritionMultipliers,
+        servings,
         userProfile,
         '朝食'
       ));
-      
+
       // 昼食
-      const lunch = this.selectMeal(filteredMeals, 'lunch', i);
+      const lunch = this.selectMeal(filteredMeals, 'lunch', usedIds, favoriteIds);
       dailyMeals.push(this.createMealFromTemplate(
-        lunch, 
-        `${i}-lunch`, 
-        nutritionMultipliers, 
-        servings, 
+        lunch,
+        `${i}-lunch`,
+        nutritionMultipliers,
+        servings,
         userProfile,
         '昼食'
       ));
-      
+
       // 夕食
-      const dinner = this.selectMeal(filteredMeals, 'dinner', i);
+      const dinner = this.selectMeal(filteredMeals, 'dinner', usedIds, favoriteIds);
       dailyMeals.push(this.createMealFromTemplate(
-        dinner, 
-        `${i}-dinner`, 
-        nutritionMultipliers, 
-        servings, 
+        dinner,
+        `${i}-dinner`,
+        nutritionMultipliers,
+        servings,
         userProfile,
         '夕食'
       ));
-      
+
       weeklyMeals[dateKey] = dailyMeals;
     }
-    
+
     console.log(`✅ ローカルエンジン: ${Object.keys(weeklyMeals).length}日分の献立生成完了`);
     return weeklyMeals;
   }
@@ -444,8 +426,8 @@ class LocalMealEngine {
     }
 
     // HbA1cによる調整
-    if (profile.currentHba1c) {
-      const hba1c = parseFloat(profile.currentHba1c);
+    if (profile.hba1c) {
+      const hba1c = profile.hba1c;
       if (hba1c > 7.0) {
         carbMultiplier *= 0.8;
         proteinMultiplier *= 1.1;
@@ -465,7 +447,7 @@ class LocalMealEngine {
     }
 
     // 体調による調整
-    switch (profile.currentCondition) {
+    switch (profile.bodyCondition) {
       case 'poor':
         calorieMultiplier *= 0.95;
         carbMultiplier *= 0.8;
@@ -483,30 +465,64 @@ class LocalMealEngine {
     };
   }
 
-  private filterMealsForUser(profile: UserHealthProfile): MealTemplate[] {
-    let filteredMeals = [...this.mealTemplates];
+  private filterMealsForUser(templates: MealTemplate[], profile: UserHealthProfile): MealTemplate[] {
+    let filtered = templates;
 
     // 糖尿病に適したメニューを優先
-    filteredMeals = filteredMeals.filter(meal => meal.diabeticFriendly);
+    filtered = filtered.filter(meal => meal.diabeticFriendly);
 
     // 食事制限レベルに応じたフィルタリング
     if (profile.dietRestriction === 'strict') {
-      filteredMeals = filteredMeals.filter(meal => meal.lowCarb);
+      filtered = filtered.filter(meal => meal.lowCarb);
     }
 
-    return filteredMeals;
+    // 苦手な食材を除外
+    if (profile.dislikedFoods && profile.dislikedFoods.length > 0) {
+      filtered = filtered.filter(template => {
+        const ingredientsText = template.ingredients.join(' ').toLowerCase();
+        return !profile.dislikedFoods!.some(food =>
+          ingredientsText.includes(food.toLowerCase())
+        );
+      });
+    }
+
+    // フィルタ後にテンプレートが0件にならないよう最低1件は確保
+    if (filtered.length === 0) {
+      filtered = templates.slice(0, 1);
+    }
+
+    return filtered;
   }
 
   private selectMeal(
-    availableMeals: MealTemplate[], 
-    category: 'breakfast' | 'lunch' | 'dinner', 
-    dayIndex: number
+    templates: MealTemplate[],
+    category: string,
+    usedIds: Set<string>,
+    favoriteIds?: string[]
   ): MealTemplate {
-    const categoryMeals = availableMeals.filter(meal => meal.category === category);
-    
-    // ローテーションして重複を避ける
-    const selectedIndex = dayIndex % categoryMeals.length;
-    return categoryMeals[selectedIndex];
+    const categoryTemplates = templates.filter(t => t.category === category);
+    if (categoryTemplates.length === 0) {
+      return templates[0];
+    }
+
+    // お気に入りかつ未使用のテンプレートを優先
+    if (favoriteIds && favoriteIds.length > 0) {
+      const favUnused = categoryTemplates.filter(
+        t => favoriteIds.includes(t.id) && !usedIds.has(t.id)
+      );
+      if (favUnused.length > 0) {
+        const selected = favUnused[Math.floor(Math.random() * favUnused.length)];
+        usedIds.add(selected.id);
+        return selected;
+      }
+    }
+
+    // 未使用のテンプレートから選択
+    const unused = categoryTemplates.filter(t => !usedIds.has(t.id));
+    const pool = unused.length > 0 ? unused : categoryTemplates;
+    const selected = pool[Math.floor(Math.random() * pool.length)];
+    usedIds.add(selected.id);
+    return selected;
   }
 
   private createMealFromTemplate(
@@ -553,33 +569,32 @@ class LocalMealEngine {
     let description = `${mealType}に最適化された血糖値管理メニュー。`;
 
     // 食材選択に基づく説明を追加（複数選択対応）
-    if (profile.preferredMainCourses && profile.preferredMainCourses.length > 0) {
-      const mainCoursesText = profile.preferredMainCourses.join('、');
-      if (profile.preferredMainCourses.some(course => course.includes('玄米') || course.includes('雑穀'))) {
+    if (profile.selectedMainCourses && profile.selectedMainCourses.length > 0) {
+      if (profile.selectedMainCourses.some(course => course.includes('玄米') || course.includes('雑穀'))) {
         description += "選択された低GI主食で血糖値上昇を緩やかにします。";
-      } else if (profile.preferredMainCourses.some(course => course.includes('なし'))) {
+      } else if (profile.selectedMainCourses.some(course => course.includes('なし'))) {
         description += "主食なしの糖質制限スタイルでケトジェニック効果を重視します。";
-      } else if (profile.preferredMainCourses.some(course => course.includes('オートミール'))) {
+      } else if (profile.selectedMainCourses.some(course => course.includes('オートミール'))) {
         description += "水溶性食物繊維豊富なオートミールで満腹感と血糖値安定を両立。";
       }
     }
 
-    if (profile.preferredMainIngredients && profile.preferredMainIngredients.length > 0) {
-      if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('鶏むね肉') || ingredient.includes('ささみ'))) {
+    if (profile.selectedMainIngredients && profile.selectedMainIngredients.length > 0) {
+      if (profile.selectedMainIngredients.some(ingredient => ingredient.includes('鶏むね肉') || ingredient.includes('ささみ'))) {
         description += "高タンパク・低脂肪の鶏肉で筋肉維持をサポート。";
-      } else if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('鮭') || ingredient.includes('サバ'))) {
+      } else if (profile.selectedMainIngredients.some(ingredient => ingredient.includes('鮭') || ingredient.includes('サバ'))) {
         description += "オメガ3脂肪酸豊富な魚で心血管の健康もケア。";
-      } else if (profile.preferredMainIngredients.some(ingredient => ingredient.includes('豆腐'))) {
+      } else if (profile.selectedMainIngredients.some(ingredient => ingredient.includes('豆腐'))) {
         description += "植物性タンパク質で消化に優しく血糖値に影響を与えません。";
       }
     }
 
-    if (profile.preferredSideIngredients && profile.preferredSideIngredients.length > 0) {
-      if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('ブロッコリー') || ingredient.includes('ほうれん草'))) {
+    if (profile.selectedSideIngredients && profile.selectedSideIngredients.length > 0) {
+      if (profile.selectedSideIngredients.some(ingredient => ingredient.includes('ブロッコリー') || ingredient.includes('ほうれん草'))) {
         description += "緑黄色野菜で抗酸化作用とミネラル補給。";
-      } else if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('きのこ'))) {
+      } else if (profile.selectedSideIngredients.some(ingredient => ingredient.includes('きのこ'))) {
         description += "きのこ類の食物繊維で血糖値上昇抑制効果を期待。";
-      } else if (profile.preferredSideIngredients.some(ingredient => ingredient.includes('わかめ') || ingredient.includes('ひじき'))) {
+      } else if (profile.selectedSideIngredients.some(ingredient => ingredient.includes('わかめ') || ingredient.includes('ひじき'))) {
         description += "海藻のミネラルと水溶性食物繊維で代謝をサポート。";
       }
     }
@@ -597,7 +612,7 @@ class LocalMealEngine {
       description += "高タンパク質で筋肉維持と血糖値安定をサポートします。";
     }
 
-    if (profile.currentCondition === 'poor') {
+    if (profile.bodyCondition === 'poor') {
       description += "体調不良時でも消化しやすく調理しています。";
     }
 
@@ -614,9 +629,12 @@ class LocalMealEngine {
         weight: 70,
         activityLevel: 'moderate',
         currentGlucose: 120,
-        currentHba1c: '6.8',
-        currentCondition: 'normal',
-        dietRestriction: 'normal'
+        hba1c: 6.8,
+        bodyCondition: 'normal',
+        dietRestriction: 'normal',
+        selectedMainCourses: [],
+        selectedMainIngredients: [],
+        selectedSideIngredients: [],
       },
       periodDays,
       servings,

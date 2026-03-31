@@ -19,6 +19,7 @@ import DailyNutritionSummary from '../../components/DailyNutritionSummary';
 import mealStorageService from '../../services/mealStorageService';
 import localMealEngine from '../../services/localMealEngine';
 import favoritesService from '../../services/favoritesService';
+import ingredientSubstitutionService, { SubstituteOption } from '../../services/ingredientSubstitutionService';
 
 export default function DashboardScreen() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -56,6 +57,16 @@ export default function DashboardScreen() {
   const [allGlucoseRecords, setAllGlucoseRecords] = useState<GlucoseRecord[]>([]);
   const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
 
+  // Substitution modal
+  const [showSubstModal, setShowSubstModal] = useState(false);
+  const [substIngredient, setSubstIngredient] = useState('');
+  const [substOriginalName, setSubstOriginalName] = useState('');
+  const [substOptions, setSubstOptions] = useState<SubstituteOption[]>([]);
+  const [substOriginalNutrition, setSubstOriginalNutrition] = useState<any>(null);
+
+  // Medical guidance
+  const [medicalGuidance, setMedicalGuidance] = useState<User['medicalGuidance']>(undefined);
+
   const today = new Date().toISOString().split('T')[0];
 
   const getGreeting = (): string => {
@@ -86,6 +97,7 @@ export default function DashboardScreen() {
           user.onboardingCompleted = true;
         }
         setCurrentUser(user);
+        setMedicalGuidance(user.medicalGuidance);
 
         const favIds = await favoritesService.getFavoriteIds(user.id);
         setFavoriteIds(favIds);
@@ -288,6 +300,8 @@ export default function DashboardScreen() {
         weight: currentUser.healthData.weight,
         likedFoods: currentUser.foodPreferences.liked,
         dislikedFoods: currentUser.foodPreferences.disliked,
+        dailyCarbLimit: currentUser.medicalGuidance?.dailyCarbLimit,
+        dailyCalorieLimit: currentUser.medicalGuidance?.dailyCalorieLimit,
       };
 
       const tomorrow = new Date();
@@ -404,6 +418,44 @@ export default function DashboardScreen() {
         date: r.weekStart,
         value: r.hba1c!,
       }));
+  };
+
+  const openSubstitution = (ingredientText: string) => {
+    const result = ingredientSubstitutionService.findSubstitutes(ingredientText);
+    if (!result) {
+      Alert.alert('情報', 'この食材の代替候補はまだ登録されていません');
+      return;
+    }
+    setSubstIngredient(ingredientText);
+    setSubstOriginalName(result.originalName);
+    setSubstOptions(result.entry.substitutes);
+    setSubstOriginalNutrition(result.entry.nutrition);
+    setShowSubstModal(true);
+  };
+
+  const applySubstitution = (option: SubstituteOption) => {
+    if (!selectedMealDetail) return;
+    const amount = ingredientSubstitutionService.parseAmount(substIngredient);
+    const diff = ingredientSubstitutionService.calculateNutritionDiff(
+      substOriginalName, option.name, amount
+    );
+    if (!diff) return;
+
+    const newIngredients = selectedMealDetail.ingredients.map(ing =>
+      ing === substIngredient
+        ? ingredientSubstitutionService.replaceIngredientText(ing, substOriginalName, option.name)
+        : ing
+    );
+
+    setSelectedMealDetail({
+      ...selectedMealDetail,
+      ingredients: newIngredients,
+      calories: selectedMealDetail.calories + diff.calories,
+      carbs: Math.max(0, selectedMealDetail.carbs + diff.carbs),
+      protein: Math.max(0, selectedMealDetail.protein + diff.protein),
+      fat: Math.max(0, selectedMealDetail.fat + diff.fat),
+    });
+    setShowSubstModal(false);
   };
 
   const screenWidth = Dimensions.get('window').width;
@@ -568,7 +620,7 @@ export default function DashboardScreen() {
 
       {/* Nutrition summary */}
       <View style={styles.card}>
-        <DailyNutritionSummary date={today} />
+        <DailyNutritionSummary date={today} medicalGuidance={medicalGuidance} />
       </View>
 
       {/* Update tomorrow's meals */}
@@ -611,7 +663,14 @@ export default function DashboardScreen() {
 
                 <Text style={styles.modalSectionTitle}>材料</Text>
                 {selectedMealDetail.ingredients.map((ing, i) => (
-                  <Text key={i} style={styles.ingredientText}>・{ing}</Text>
+                  <View key={i} style={styles.ingredientRow}>
+                    <Text style={styles.ingredientText}>・{ing}</Text>
+                    {ingredientSubstitutionService.findSubstitutes(ing) && (
+                      <TouchableOpacity style={styles.substButton} onPress={() => openSubstitution(ing)}>
+                        <Ionicons name="swap-horizontal" size={16} color="#007AFF" />
+                      </TouchableOpacity>
+                    )}
+                  </View>
                 ))}
 
                 <Text style={styles.modalSectionTitle}>作り方</Text>
@@ -620,6 +679,38 @@ export default function DashboardScreen() {
                 ))}
               </ScrollView>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Substitution modal */}
+      <Modal visible={showSubstModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.trendHeader}>
+              <Text style={styles.trendTitle}>「{substOriginalName}」の代替候補</Text>
+              <TouchableOpacity onPress={() => setShowSubstModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {substOptions.map((option, i) => (
+                <View key={i} style={styles.substCard}>
+                  <Text style={styles.substName}>{option.name}</Text>
+                  <View style={styles.substCompareRow}>
+                    <Text style={styles.substCompareText}>GI: {substOriginalNutrition?.gi}→{option.nutrition.gi}</Text>
+                    <Text style={styles.substCompareText}>Cal: {substOriginalNutrition?.caloriesPer100g}→{option.nutrition.caloriesPer100g}</Text>
+                  </View>
+                  <View style={styles.substCompareRow}>
+                    <Text style={styles.substCompareText}>糖質: {substOriginalNutrition?.carbsPer100g}→{option.nutrition.carbsPer100g}g</Text>
+                    <Text style={styles.substCompareText}>タンパク: {substOriginalNutrition?.proteinPer100g}→{option.nutrition.proteinPer100g}g</Text>
+                  </View>
+                  <TouchableOpacity style={styles.substApplyButton} onPress={() => applySubstitution(option)}>
+                    <Text style={styles.substApplyText}>この食材に置き換える</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+            </ScrollView>
           </View>
         </View>
       </Modal>
@@ -676,6 +767,17 @@ export default function DashboardScreen() {
                 />
               ) : (
                 <Text style={styles.emptyText}>選択期間にデータがありません</Text>
+              )}
+
+              {medicalGuidance && (medicalGuidance.glucoseMin || medicalGuidance.glucoseMax) && (
+                <View style={styles.trendTargetRow}>
+                  {medicalGuidance.glucoseMin && (
+                    <Text style={styles.trendTargetText}>下限目標: {medicalGuidance.glucoseMin} mg/dL</Text>
+                  )}
+                  {medicalGuidance.glucoseMax && (
+                    <Text style={[styles.trendTargetText, { color: '#F44336' }]}>上限目標: {medicalGuidance.glucoseMax} mg/dL</Text>
+                  )}
+                </View>
               )}
 
               {/* Meal timing filter */}
@@ -1139,4 +1241,14 @@ const styles = StyleSheet.create({
     color: '#ccc',
     marginHorizontal: 4,
   },
+  ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  substButton: { padding: 4 },
+  substCard: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  substName: { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 8 },
+  substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
+  substCompareText: { fontSize: 13, color: '#666' },
+  substApplyButton: { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
+  trendTargetRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8, backgroundColor: '#f9f9f9', borderRadius: 8, marginBottom: 8 },
+  trendTargetText: { fontSize: 13, fontWeight: '500', color: '#4CAF50' },
 });

@@ -92,8 +92,14 @@ export default function DailyNutritionSummary({ date, meals: propMeals }: DailyN
   const loadMeals = async () => {
     setLoading(true);
     try {
-      const mealsForDate = await mealStorageService.getMealsForDate(date);
-      setMeals(mealsForDate);
+      const plans = await mealStorageService.getSavedMealPlans();
+      for (const plan of plans) {
+        if (plan.meals[date]) {
+          setMeals(plan.meals[date]);
+          return;
+        }
+      }
+      setMeals([]);
     } catch (error) {
       console.error('栄養サマリー読み込みエラー:', error);
     } finally {

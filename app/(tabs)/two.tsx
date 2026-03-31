@@ -19,6 +19,7 @@ import mealStorageService from '../../services/mealStorageService';
 import favoritesService, { FavoriteMeal } from '../../services/favoritesService';
 import * as Clipboard from 'expo-clipboard';
 import shoppingListService, { ShoppingItem, ShoppingList } from '../../services/shoppingListService';
+import ingredientSubstitutionService, { SubstituteOption } from '../../services/ingredientSubstitutionService';
 
 // ============================================================
 // Types
@@ -57,6 +58,13 @@ export default function MealPlanScreen() {
   const [showShoppingModal, setShowShoppingModal] = useState(false);
   const [shoppingList, setShoppingList] = useState<ShoppingList | null>(null);
   const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
+
+  // Substitution modal
+  const [showSubstModal, setShowSubstModal] = useState(false);
+  const [substIngredient, setSubstIngredient] = useState('');
+  const [substOriginalName, setSubstOriginalName] = useState('');
+  const [substOptions, setSubstOptions] = useState<SubstituteOption[]>([]);
+  const [substOriginalNutrition, setSubstOriginalNutrition] = useState<any>(null);
 
   // ============================================================
   // Data Loading
@@ -157,6 +165,8 @@ export default function MealPlanScreen() {
       likedFoods: currentUser.foodPreferences?.liked || [],
       dislikedFoods: currentUser.foodPreferences?.disliked || [],
       preferLowGi,
+      dailyCarbLimit: currentUser.medicalGuidance?.dailyCarbLimit,
+      dailyCalorieLimit: currentUser.medicalGuidance?.dailyCalorieLimit,
     };
   };
 
@@ -286,6 +296,44 @@ export default function MealPlanScreen() {
     );
     await Clipboard.setStringAsync(text);
     Alert.alert('コピー完了', '買い物リストをクリップボードにコピーしました');
+  };
+
+  const openSubstitution = (ingredientText: string) => {
+    const result = ingredientSubstitutionService.findSubstitutes(ingredientText);
+    if (!result) {
+      Alert.alert('情報', 'この食材の代替候補はまだ登録されていません');
+      return;
+    }
+    setSubstIngredient(ingredientText);
+    setSubstOriginalName(result.originalName);
+    setSubstOptions(result.entry.substitutes);
+    setSubstOriginalNutrition(result.entry.nutrition);
+    setShowSubstModal(true);
+  };
+
+  const applySubstitution = (option: SubstituteOption) => {
+    if (!selectedMeal) return;
+    const amount = ingredientSubstitutionService.parseAmount(substIngredient);
+    const diff = ingredientSubstitutionService.calculateNutritionDiff(
+      substOriginalName, option.name, amount
+    );
+    if (!diff) return;
+
+    const newIngredients = selectedMeal.ingredients.map(ing =>
+      ing === substIngredient
+        ? ingredientSubstitutionService.replaceIngredientText(ing, substOriginalName, option.name)
+        : ing
+    );
+
+    setSelectedMeal({
+      ...selectedMeal,
+      ingredients: newIngredients,
+      calories: selectedMeal.calories + diff.calories,
+      carbs: Math.max(0, selectedMeal.carbs + diff.carbs),
+      protein: Math.max(0, selectedMeal.protein + diff.protein),
+      fat: Math.max(0, selectedMeal.fat + diff.fat),
+    });
+    setShowSubstModal(false);
   };
 
   // ============================================================
@@ -623,8 +671,12 @@ export default function MealPlanScreen() {
                   <Text style={styles.recipeSectionTitle}>材料</Text>
                   {selectedMeal.ingredients.map((ing, i) => (
                     <View key={i} style={styles.ingredientRow}>
-                      <View style={styles.ingredientDot} />
-                      <Text style={styles.ingredientText}>{ing}</Text>
+                      <Text style={styles.ingredientText}>・{ing}</Text>
+                      {ingredientSubstitutionService.findSubstitutes(ing) && (
+                        <TouchableOpacity style={styles.substButton} onPress={() => openSubstitution(ing)}>
+                          <Ionicons name="swap-horizontal" size={16} color="#007AFF" />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   ))}
 
@@ -640,6 +692,38 @@ export default function MealPlanScreen() {
                   ))}
                 </>
               )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Substitution modal */}
+      <Modal visible={showSubstModal} animationType="fade" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '60%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>「{substOriginalName}」の代替候補</Text>
+              <TouchableOpacity onPress={() => setShowSubstModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            <ScrollView>
+              {substOptions.map((option, i) => (
+                <View key={i} style={styles.substCard}>
+                  <Text style={styles.substName}>{option.name}</Text>
+                  <View style={styles.substCompareRow}>
+                    <Text style={styles.substCompareText}>GI: {substOriginalNutrition?.gi}→{option.nutrition.gi}</Text>
+                    <Text style={styles.substCompareText}>Cal: {substOriginalNutrition?.caloriesPer100g}→{option.nutrition.caloriesPer100g}</Text>
+                  </View>
+                  <View style={styles.substCompareRow}>
+                    <Text style={styles.substCompareText}>糖質: {substOriginalNutrition?.carbsPer100g}→{option.nutrition.carbsPer100g}g</Text>
+                    <Text style={styles.substCompareText}>タンパク: {substOriginalNutrition?.proteinPer100g}→{option.nutrition.proteinPer100g}g</Text>
+                  </View>
+                  <TouchableOpacity style={styles.substApplyButton} onPress={() => applySubstitution(option)}>
+                    <Text style={styles.substApplyText}>この食材に置き換える</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
             </ScrollView>
           </View>
         </View>
@@ -1049,12 +1133,7 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     marginTop: 4,
   },
-  ingredientRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: 6,
-    gap: 8,
-  },
+  ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   ingredientDot: {
     width: 6,
     height: 6,
@@ -1068,6 +1147,13 @@ const styles = StyleSheet.create({
     color: '#444',
     lineHeight: 20,
   },
+  substButton: { padding: 4 },
+  substCard: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
+  substName: { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 8 },
+  substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
+  substCompareText: { fontSize: 13, color: '#666' },
+  substApplyButton: { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   stepRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',

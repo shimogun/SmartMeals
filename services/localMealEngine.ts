@@ -17,6 +17,7 @@ interface MealTemplate {
   highProtein: boolean;
   difficulty: 'easy' | 'medium' | 'hard';
   season?: string[];
+  gi: number; // GI値目安（低GI: 55以下、中GI: 56-69、高GI: 70以上）
 }
 
 class LocalMealEngine {
@@ -52,7 +53,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 40
       },
       {
         id: 'breakfast-02',
@@ -77,7 +79,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 35
       },
       {
         id: 'breakfast-03',
@@ -101,7 +104,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: false,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 52
       },
       {
         id: 'breakfast-04',
@@ -126,7 +130,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 45
       },
       {
         id: 'breakfast-05',
@@ -151,7 +156,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 38
       },
 
       // 昼食メニュー
@@ -179,7 +185,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 30
       },
       {
         id: 'lunch-02',
@@ -205,7 +212,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: false,
         highProtein: true,
-        difficulty: 'medium'
+        difficulty: 'medium',
+        gi: 48
       },
       {
         id: 'lunch-03',
@@ -231,7 +239,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'medium'
+        difficulty: 'medium',
+        gi: 35
       },
 
       // 夕食メニュー
@@ -260,7 +269,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'easy'
+        difficulty: 'easy',
+        gi: 38
       },
       {
         id: 'dinner-02',
@@ -288,7 +298,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'medium'
+        difficulty: 'medium',
+        gi: 42
       },
       {
         id: 'dinner-03',
@@ -315,7 +326,8 @@ class LocalMealEngine {
         diabeticFriendly: true,
         lowCarb: true,
         highProtein: true,
-        difficulty: 'medium'
+        difficulty: 'medium',
+        gi: 45
       },
     ];
   }
@@ -484,6 +496,19 @@ class LocalMealEngine {
           ingredientsText.includes(food.toLowerCase())
         );
       });
+    }
+
+    // 低GI優先フィルタリング
+    if (profile.preferLowGi) {
+      const lowGi = filtered.filter(meal => meal.gi <= 55);
+      if (lowGi.length >= 3) {
+        filtered = lowGi;
+      } else {
+        const medGi = filtered.filter(meal => meal.gi <= 69);
+        if (medGi.length > 0) {
+          filtered = medGi;
+        }
+      }
     }
 
     // フィルタ後にテンプレートが0件にならないよう最低1件は確保

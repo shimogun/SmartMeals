@@ -1,1020 +1,512 @@
-import { useState, useRef, useEffect } from 'react';
-import { StyleSheet, View, Text, TouchableOpacity, SafeAreaView, Dimensions, Modal, TextInput, Alert, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  ScrollView,
+  Alert,
+  Modal,
+  RefreshControl,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  runOnJS,
-  withSpring,
-  interpolate,
-  Extrapolate
-} from 'react-native-reanimated';
-import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { User, GlucoseRecord, GeneratedMeal, SavedMealPlan, MealTiming } from '../../types';
+import DailyNutritionSummary from '../../components/DailyNutritionSummary';
+import mealStorageService from '../../services/mealStorageService';
+import localMealEngine from '../../services/localMealEngine';
+import favoritesService from '../../services/favoritesService';
 
-type GlucoseRecord = {
-  id: string;
-  value: number;
-  timestamp: number;
-  date: string;
-  mealType: string;
-  mealNote: string;
-  userId?: string;
-};
+export default function DashboardScreen() {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
 
-type TimeRange = '1week' | '1month' | '3months';
+  // Blood glucose input
+  const [glucoseValue, setGlucoseValue] = useState('');
+  const [mealTiming, setMealTiming] = useState<MealTiming>('朝');
+  const [latestGlucose, setLatestGlucose] = useState<GlucoseRecord | null>(null);
 
-type WeeklyRecord = {
-  id: string;
-  weekStart: string;
-  weight: number | null;
-  exercise: 'high' | 'normal' | 'low' | null;
-  condition: 'good' | 'normal' | 'poor' | null;
-  hba1c: number | null;
-  timestamp: number;
-  bloodPressure?: {
-    systolic: number;
-    diastolic: number;
+  // Weight/BP accordion
+  const [showExtraInputs, setShowExtraInputs] = useState(false);
+  const [weightValue, setWeightValue] = useState('');
+  const [systolicValue, setSystolicValue] = useState('');
+  const [diastolicValue, setDiastolicValue] = useState('');
+
+  // Today's meals
+  const [todayMeals, setTodayMeals] = useState<GeneratedMeal[]>([]);
+  const [selectedMealDetail, setSelectedMealDetail] = useState<GeneratedMeal | null>(null);
+  const [showMealModal, setShowMealModal] = useState(false);
+
+  // Favorites
+  const [favoriteIds, setFavoriteIds] = useState<Set<string>>(new Set());
+
+  // Refresh
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Meal update
+  const [updateMessage, setUpdateMessage] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
+
+  const today = new Date().toISOString().split('T')[0];
+
+  const getGreeting = (): string => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'おはようございます';
+    if (hour < 18) return 'こんにちは';
+    return 'こんばんは';
   };
-  userId?: string;
-};
 
-type User = {
-  id: string;
-  name: string;
-  age: number;
-  avatar: string;
-  createdAt: number;
-  healthData?: {
-    height?: number; // cm
-    weight?: number; // kg
-    gender?: 'male' | 'female';
-    activityLevel?: 'light' | 'moderate' | 'high';
+  const formatDate = (): string => {
+    const now = new Date();
+    const days = ['日', '月', '火', '水', '木', '金', '土'];
+    return `${now.getMonth() + 1}/${now.getDate()}（${days[now.getDay()]}）`;
   };
-};
 
+  const loadData = useCallback(async () => {
+    try {
+      const usersData = await AsyncStorage.getItem('users');
+      const indexData = await AsyncStorage.getItem('currentUserIndex');
+      if (usersData) {
+        const users: User[] = JSON.parse(usersData);
+        const index = indexData ? parseInt(indexData) : 0;
+        const user = users[index] || users[0];
+        if (!user.foodPreferences) {
+          user.foodPreferences = { liked: [], disliked: [] };
+        }
+        if (user.onboardingCompleted === undefined) {
+          user.onboardingCompleted = true;
+        }
+        setCurrentUser(user);
 
-const { width } = Dimensions.get('window');
+        const favIds = await favoritesService.getFavoriteIds(user.id);
+        setFavoriteIds(favIds);
+      }
 
-// 血糖値レベルに応じた色を返す関数
-const getGlucoseColor = (value: number): string => {
-  if (value < 70) return '#2196F3'; // 低血糖（青）
-  if (value <= 109) return '#4CAF50'; // 正常値（緑）
-  if (value <= 125) return '#FF9800'; // 境界型（オレンジ）
-  return '#F44336'; // 糖尿病型（赤）
-};
+      const glucoseData = await AsyncStorage.getItem('glucose_records');
+      if (glucoseData) {
+        const records: GlucoseRecord[] = JSON.parse(glucoseData);
+        if (records.length > 0) {
+          const sorted = records.sort((a, b) => b.timestamp - a.timestamp);
+          setLatestGlucose(sorted[0]);
+        }
+      }
 
-export default function HomeScreen() {
-  const [users, setUsers] = useState<User[]>([]);
-  const [currentUserIndex, setCurrentUserIndex] = useState(0);
-  const [showAddUser, setShowAddUser] = useState(false);
-  const [showEditProfile, setShowEditProfile] = useState(false);
-  const [showHealthModal, setShowHealthModal] = useState(false);
-  const [showUserDetailModal, setShowUserDetailModal] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-  const [showStatsModal, setShowStatsModal] = useState(false);
-  const [editName, setEditName] = useState('');
-  const [editAge, setEditAge] = useState('');
-  const [newName, setNewName] = useState('');
-  const [newAge, setNewAge] = useState('');
+      const plans = await mealStorageService.getSavedMealPlans();
+      if (plans.length > 0) {
+        for (const plan of plans) {
+          if (plan.meals[today]) {
+            setTodayMeals(plan.meals[today]);
+            break;
+          }
+        }
+      }
 
-  // 健康情報用のstate
-  const [healthHeight, setHealthHeight] = useState('');
-  const [healthWeight, setHealthWeight] = useState('');
-  const [healthGender, setHealthGender] = useState<'male' | 'female'>('male');
-  const [healthActivity, setHealthActivity] = useState<'light' | 'moderate' | 'high'>('moderate');
-  const [selectedHealthUserIndex, setSelectedHealthUserIndex] = useState(0);
-
-  // 統計データ用のstate
-  const [glucoseRecords, setGlucoseRecords] = useState<GlucoseRecord[]>([]);
-  const [weeklyRecords, setWeeklyRecords] = useState<WeeklyRecord[]>([]);
-  const [timeRange, setTimeRange] = useState<TimeRange>('1week');
-
-  // スワイプアニメーション用
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const rotate = useSharedValue(0);
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(1);
-
- // データの読み込み
- useEffect(() => {
-   loadData();
- }, []);
-
- const loadData = async () => {
-   try {
-     // ユーザーデータ読み込み
-     const storedUsers = await AsyncStorage.getItem('users');
-     if (storedUsers) {
-       setUsers(JSON.parse(storedUsers));
-     } else {
-       // 初回起動時のサンプルユーザー
-       const defaultUser: User = {
-         id: Date.now().toString(),
-         name: 'あなた',
-         age: 30,
-         avatar: '👤',
-         createdAt: Date.now()
-       };
-       setUsers([defaultUser]);
-       await AsyncStorage.setItem('users', JSON.stringify([defaultUser]));
-     }
-
-     // 血糖値データ読み込み
-     const storedGlucose = await AsyncStorage.getItem('glucose_records');
-     if (storedGlucose) {
-       setGlucoseRecords(JSON.parse(storedGlucose));
-     }
-
-     // 週間記録データ読み込み
-     const storedWeekly = await AsyncStorage.getItem('weekly_records');
-     if (storedWeekly) {
-       setWeeklyRecords(JSON.parse(storedWeekly));
-     }
-   } catch (error) {
-     console.error('データ読み込みエラー:', error);
-   }
- };
-
- // ユーザー切り替え
- const switchUser = (direction: number) => {
-   if (users.length <= 1) return;
-   
-   setCurrentUserIndex(prev => {
-     const newIndex = prev + direction;
-     if (newIndex < 0) return users.length - 1;
-     if (newIndex >= users.length) return 0;
-     return newIndex;
-   });
- };
-
-// Tinder風スワイプアニメーション付きユーザー切り替え
-const switchUserWithAnimation = (direction: number) => {
-  if (users.length <= 1) return;
-
-  // カードを画面外に飛ばすアニメーション
-  const targetX = direction > 0 ? -width * 1.5 : width * 1.5;
-  const targetRotation = direction > 0 ? -30 : 30;
-  
-  translateX.value = withSpring(targetX, { duration: 300 });
-  rotate.value = withSpring(targetRotation, { duration: 300 });
-  scale.value = withSpring(0.8, { duration: 300 });
-  opacity.value = withSpring(0, { duration: 300 });
-  
-  // アニメーション完了後にユーザー切り替え
-  setTimeout(() => {
-    switchUser(direction);
-    
-    // 新しいカードを反対側から登場させる
-    translateX.value = direction > 0 ? width * 0.3 : -width * 0.3;
-    rotate.value = direction > 0 ? 15 : -15;
-    scale.value = 0.9;
-    opacity.value = 0;
-    
-    // 正常位置に戻すアニメーション
-    translateX.value = withSpring(0, { duration: 400 });
-    translateY.value = withSpring(0, { duration: 400 });
-    rotate.value = withSpring(0, { duration: 400 });
-    scale.value = withSpring(1, { duration: 400 });
-    opacity.value = withSpring(1, { duration: 400 });
-  }, 300);
-};
-
-// Tinder風パンジェスチャー
-const panGesture = Gesture.Pan()
-  .onUpdate((event) => {
-    translateX.value = event.translationX;
-    translateY.value = event.translationY;
-    
-    // スワイプ方向に応じた回転
-    const rotationIntensity = Math.min(Math.abs(event.translationX) / width, 1);
-    const rotationDirection = event.translationX > 0 ? 1 : -1;
-    rotate.value = rotationDirection * rotationIntensity * 15;
-    
-    // スワイプ中の視覚効果
-    const progress = Math.abs(event.translationX) / (width * 0.4);
-    scale.value = interpolate(
-      progress,
-      [0, 1],
-      [1, 0.95],
-      Extrapolate.CLAMP
-    );
-    opacity.value = interpolate(
-      progress,
-      [0, 1],
-      [1, 0.8],
-      Extrapolate.CLAMP
-    );
-  })
-  .onEnd((event) => {
-    const threshold = width * 0.3;
-    const velocity = Math.abs(event.velocityX);
-    
-    // 速度または距離でスワイプ判定
-    if (Math.abs(event.translationX) > threshold || velocity > 500) {
-      // スワイプが成功
-      const direction = event.translationX > 0 ? -1 : 1;
-      runOnJS(switchUserWithAnimation)(direction);
-    } else {
-      // スワイプ失敗：元の位置に戻す
-      translateX.value = withSpring(0, { duration: 400 });
-      translateY.value = withSpring(0, { duration: 400 });
-      rotate.value = withSpring(0, { duration: 400 });
-      scale.value = withSpring(1, { duration: 400 });
-      opacity.value = withSpring(1, { duration: 400 });
+      generateUpdateMessage();
+    } catch (error) {
+      console.error('データ読み込みエラー:', error);
     }
-  });
+  }, [today]);
 
-// Tinder風アニメーションスタイル
-const animatedCardStyle = useAnimatedStyle(() => {
-  return {
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { rotate: `${rotate.value}deg` },
-      { scale: scale.value }
-    ],
-    opacity: opacity.value,
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
   };
-});
 
+  const generateUpdateMessage = async () => {
+    const glucoseData = await AsyncStorage.getItem('glucose_records');
+    if (!glucoseData) {
+      setUpdateMessage('献立を生成して、毎日の食事管理を始めましょう');
+      return;
+    }
+    const records: GlucoseRecord[] = JSON.parse(glucoseData);
+    const recent = records.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
 
- // プロフィール編集を開始
- const startEditProfile = () => {
-   const user = users[currentUserIndex];
-   setEditName(user.name);
-   setEditAge(user.age.toString());
-   setShowEditProfile(true);
- };
+    if (recent.length === 0) {
+      setUpdateMessage('献立を生成して、毎日の食事管理を始めましょう');
+      return;
+    }
 
- // 健康情報編集を開始
- const startEditHealth = () => {
-   setSelectedHealthUserIndex(currentUserIndex); // 現在のユーザーを初期選択
-   const user = users[currentUserIndex];
-   const health = user.healthData || {};
-   setHealthHeight(health.height?.toString() || '');
-   setHealthWeight(health.weight?.toString() || '');
-   setHealthGender(health.gender || 'male');
-   setHealthActivity(health.activityLevel || 'moderate');
-   setShowHealthModal(true);
- };
+    const avgGlucose = recent.reduce((sum, r) => sum + r.value, 0) / recent.length;
+    if (avgGlucose > 180) {
+      setUpdateMessage('血糖値が高めの傾向です。糖質控えめの献立を提案します');
+    } else if (avgGlucose > 140) {
+      setUpdateMessage('血糖値がやや高めです。バランスの良い献立を提案します');
+    } else {
+      setUpdateMessage('血糖値は安定しています。現在の食事を継続しましょう');
+    }
+  };
 
- // ユーザー詳細表示を開始
- const showUserDetail = () => {
-   setShowUserDetailModal(true);
- };
+  const saveGlucose = async () => {
+    if (!currentUser) return;
+    const value = parseFloat(glucoseValue);
+    if (isNaN(value) || value < 20 || value > 600) {
+      Alert.alert('入力エラー', '血糖値は20〜600の範囲で入力してください');
+      return;
+    }
 
- // 統計モーダルを開く
- const openStatsModal = () => {
-   loadData(); // 最新データを読み込み
-   setShowStatsModal(true);
- };
+    const record: GlucoseRecord = {
+      id: Date.now().toString(),
+      value,
+      timestamp: Date.now(),
+      date: today,
+      mealType: mealTiming,
+      userId: currentUser.id,
+    };
 
- // 現在のユーザーのサマリーを取得
- const getUserSummary = () => {
-   const currentUser = users[currentUserIndex];
-   if (!currentUser) return { avgGlucose: null, latestWeight: null, glucoseChange: null };
+    try {
+      const existing = await AsyncStorage.getItem('glucose_records');
+      const records: GlucoseRecord[] = existing ? JSON.parse(existing) : [];
+      records.push(record);
+      await AsyncStorage.setItem('glucose_records', JSON.stringify(records));
+      setLatestGlucose(record);
+      setGlucoseValue('');
+      Alert.alert('保存完了', `血糖値 ${value} mg/dL を記録しました`);
+      generateUpdateMessage();
+    } catch {
+      Alert.alert('エラー', '保存に失敗しました');
+    }
+  };
 
-   // 直近1週間の血糖値データを取得
-   const oneWeekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-   const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+  const saveWeightAndBP = async () => {
+    if (!currentUser) return;
+    const hasWeight = weightValue.trim() !== '';
+    const hasBP = systolicValue.trim() !== '' && diastolicValue.trim() !== '';
 
-   const userGlucoseRecords = glucoseRecords.filter(r =>
-     r.userId === currentUser.id || (!r.userId && currentUserIndex === 0)
-   );
+    if (!hasWeight && !hasBP) {
+      Alert.alert('入力エラー', '体重または血圧を入力してください');
+      return;
+    }
 
-   const thisWeekRecords = userGlucoseRecords.filter(r => r.timestamp >= oneWeekAgo);
-   const lastWeekRecords = userGlucoseRecords.filter(r => r.timestamp >= twoWeeksAgo && r.timestamp < oneWeekAgo);
+    try {
+      const existing = await AsyncStorage.getItem('weekly_records');
+      const records = existing ? JSON.parse(existing) : [];
 
-   // 今週の平均
-   const avgGlucose = thisWeekRecords.length > 0
-     ? Math.round(thisWeekRecords.reduce((sum, r) => sum + r.value, 0) / thisWeekRecords.length)
-     : null;
+      const record: any = {
+        id: Date.now().toString(),
+        weekStart: today,
+        timestamp: Date.now(),
+        userId: currentUser.id,
+      };
 
-   // 先週の平均との差
-   const lastWeekAvg = lastWeekRecords.length > 0
-     ? Math.round(lastWeekRecords.reduce((sum, r) => sum + r.value, 0) / lastWeekRecords.length)
-     : null;
+      if (hasWeight) {
+        const w = parseFloat(weightValue);
+        if (isNaN(w) || w < 20 || w > 300) {
+          Alert.alert('入力エラー', '体重は20〜300kgの範囲で入力してください');
+          return;
+        }
+        record.weight = w;
+      }
 
-   const glucoseChange = avgGlucose && lastWeekAvg ? avgGlucose - lastWeekAvg : null;
+      if (hasBP) {
+        const sys = parseInt(systolicValue);
+        const dia = parseInt(diastolicValue);
+        if (isNaN(sys) || isNaN(dia) || sys < 60 || sys > 260 || dia < 30 || dia > 160) {
+          Alert.alert('入力エラー', '正しい血圧値を入力してください');
+          return;
+        }
+        record.bloodPressure = { systolic: sys, diastolic: dia };
+      }
 
-   // 最新の体重を取得
-   const userWeeklyRecords = weeklyRecords
-     .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
-     .filter(r => r.weight !== null)
-     .sort((a, b) => b.timestamp - a.timestamp);
+      records.push(record);
+      await AsyncStorage.setItem('weekly_records', JSON.stringify(records));
+      setWeightValue('');
+      setSystolicValue('');
+      setDiastolicValue('');
+      setShowExtraInputs(false);
+      Alert.alert('保存完了', '記録しました');
+    } catch {
+      Alert.alert('エラー', '保存に失敗しました');
+    }
+  };
 
-   const latestWeight = userWeeklyRecords.length > 0 ? userWeeklyRecords[0].weight : null;
+  const toggleFavorite = async (meal: GeneratedMeal) => {
+    if (!currentUser) return;
+    await favoritesService.toggleFavorite(currentUser.id, {
+      id: meal.id,
+      name: meal.name,
+      calories: meal.calories,
+      carbs: meal.carbs,
+      protein: meal.protein,
+      fat: meal.fat,
+      mealType: meal.mealType,
+    });
+    const newIds = await favoritesService.getFavoriteIds(currentUser.id);
+    setFavoriteIds(newIds);
+  };
 
-   return { avgGlucose, latestWeight, glucoseChange };
- };
+  const handleUpdateMeals = async () => {
+    if (!currentUser) return;
+    setIsUpdating(true);
+    try {
+      const glucoseData = await AsyncStorage.getItem('glucose_records');
+      const records: GlucoseRecord[] = glucoseData ? JSON.parse(glucoseData) : [];
+      const recentGlucose = records.length > 0
+        ? records.sort((a, b) => b.timestamp - a.timestamp)[0].value
+        : 120;
 
- // ユーザー選択時に健康情報を更新
- const onHealthUserChange = (userIndex: number) => {
-   setSelectedHealthUserIndex(userIndex);
-   const user = users[userIndex];
-   const health = user.healthData || {};
-   setHealthHeight(health.height?.toString() || '');
-   setHealthWeight(health.weight?.toString() || '');
-   setHealthGender(health.gender || 'male');
-   setHealthActivity(health.activityLevel || 'moderate');
- };
+      const weeklyData = await AsyncStorage.getItem('weekly_records');
+      const weeklyRecords = weeklyData ? JSON.parse(weeklyData) : [];
+      const latestHba1c = weeklyRecords.length > 0
+        ? weeklyRecords.sort((a: any, b: any) => b.timestamp - a.timestamp)
+            .find((r: any) => r.hba1c)?.hba1c || 6.0
+        : 6.0;
 
- // プロフィール保存
- const saveProfile = async () => {
-   if (!editName.trim()) {
-     Alert.alert('エラー', '名前を入力してください');
-     return;
-   }
-   
-   const ageNum = parseInt(editAge);
-   if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
-     Alert.alert('エラー', '正しい年齢を入力してください');
-     return;
-   }
+      const favIds = await favoritesService.getFavoriteIds(currentUser.id);
 
-   try {
-     const updatedUsers = [...users];
-     updatedUsers[currentUserIndex] = {
-       ...updatedUsers[currentUserIndex],
-       name: editName.trim(),
-       age: ageNum
-     };
-     
-     setUsers(updatedUsers);
-     await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
-     setShowEditProfile(false);
-     
-     Alert.alert('保存完了', 'プロフィールを更新しました');
-   } catch (error) {
-     console.error('保存エラー:', error);
-     Alert.alert('エラー', 'プロフィールの保存に失敗しました');
-   }
- };
+      const profile = {
+        age: currentUser.age,
+        gender: currentUser.healthData.gender,
+        currentGlucose: recentGlucose,
+        hba1c: latestHba1c,
+        bodyCondition: 'normal',
+        activityLevel: currentUser.healthData.activityLevel,
+        dietRestriction: 'normal',
+        selectedMainCourses: [] as string[],
+        selectedMainIngredients: [] as string[],
+        selectedSideIngredients: [] as string[],
+        height: currentUser.healthData.height,
+        weight: currentUser.healthData.weight,
+        likedFoods: currentUser.foodPreferences.liked,
+        dislikedFoods: currentUser.foodPreferences.disliked,
+      };
 
- // 健康情報保存
- const saveHealthData = async () => {
-   try {
-     const height = parseFloat(healthHeight);
-     const weight = parseFloat(healthWeight);
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const startDate = tomorrow.toISOString().split('T')[0];
 
-     if (healthHeight && (isNaN(height) || height < 100 || height > 250)) {
-       Alert.alert('エラー', '身長は100〜250cmの範囲で入力してください');
-       return;
-     }
-     
-     if (healthWeight && (isNaN(weight) || weight < 30 || weight > 200)) {
-       Alert.alert('エラー', '体重は30〜200kgの範囲で入力してください');
-       return;
-     }
+      const meals = await localMealEngine.generatePersonalizedMeals(
+        profile, 3, 1, tomorrow, Array.from(favIds)
+      );
 
-     const updatedUsers = [...users];
-     const targetUser = users[selectedHealthUserIndex];
-     updatedUsers[selectedHealthUserIndex] = {
-       ...updatedUsers[selectedHealthUserIndex],
-       healthData: {
-         height: healthHeight ? height : undefined,
-         weight: healthWeight ? weight : undefined,
-         gender: healthGender,
-         activityLevel: healthActivity
-       }
-     };
-     
-     setUsers(updatedUsers);
-     await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
-     setShowHealthModal(false);
-     
-     Alert.alert('保存完了', `${targetUser.name}の基本健康情報を更新しました`);
-   } catch (error) {
-     console.error('健康情報保存エラー:', error);
-     Alert.alert('エラー', '健康情報の保存に失敗しました');
-   }
- };
+      await mealStorageService.saveMealPlan(
+        currentUser.id, meals, profile, 3, tomorrow, undefined, recentGlucose
+      );
 
- // 新しいユーザーを追加
- const addNewUser = async () => {
-   if (!newName.trim()) {
-     Alert.alert('エラー', '名前を入力してください');
-     return;
-   }
-   
-   const ageNum = parseInt(newAge);
-   if (isNaN(ageNum) || ageNum < 0 || ageNum > 120) {
-     Alert.alert('エラー', '正しい年齢を入力してください');
-     return;
-   }
-
-   try {
-     const newUser: User = {
-       id: Date.now().toString(),
-       name: newName.trim(),
-       age: ageNum,
-       avatar: '👤',
-       createdAt: Date.now()
-     };
-     
-     const updatedUsers = [...users, newUser];
-     setUsers(updatedUsers);
-     await AsyncStorage.setItem('users', JSON.stringify(updatedUsers));
-     
-     // 新しく追加したユーザーに切り替え
-     setCurrentUserIndex(updatedUsers.length - 1);
-     
-     setShowAddUser(false);
-     setNewName('');
-     setNewAge('');
-     
-     Alert.alert('追加完了', `${newName.trim()} を追加しました`);
-   } catch (error) {
-     console.error('ユーザー追加エラー:', error);
-     Alert.alert('エラー', 'ユーザーの追加に失敗しました');
-   }
- };
-
-  const currentUser = users.length > 0 ? users[currentUserIndex] : null;
-
-  if (!currentUser) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={{ color: '#333', textAlign: 'center', marginTop: 100 }}>Loading...</Text>
-      </SafeAreaView>
-    );
-  }
-
-  const summary = getUserSummary();
+      Alert.alert('更新完了', '明日からの献立を更新しました');
+      await loadData();
+    } catch (error) {
+      Alert.alert('エラー', '献立の更新に失敗しました');
+    } finally {
+      setIsUpdating(false);
+    }
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.swipeContainer}>
-        {/* メインプロフィールカード */}
-        <GestureDetector gesture={panGesture}>
-          <Animated.View style={[styles.profileCard, animatedCardStyle]}>
-            {/* アバター */}
-            <View style={styles.avatarContainer}>
-              <Text style={styles.avatarEmoji}>{currentUser.avatar}</Text>
-            </View>
-
-            {/* ユーザー名 */}
-            <Text style={styles.userName}>{currentUser.name}</Text>
-            <Text style={styles.userAge}>{currentUser.age}歳</Text>
-
-            {/* サマリー表示 */}
-            <View style={styles.summaryContainer}>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>血糖</Text>
-                {summary.avgGlucose ? (
-                  <View style={styles.summaryValueContainer}>
-                    <View style={[styles.glucoseIndicator, { backgroundColor: getGlucoseColor(summary.avgGlucose) }]} />
-                    <Text style={[styles.summaryValue, { color: getGlucoseColor(summary.avgGlucose) }]}>{summary.avgGlucose}</Text>
-                    <Text style={styles.summaryUnit}>mg/dL</Text>
-                    {summary.glucoseChange !== null && (
-                      <Text style={[
-                        styles.summaryChange,
-                        summary.glucoseChange < 0 ? styles.changeGood : styles.changeBad
-                      ]}>
-                        {summary.glucoseChange > 0 ? '+' : ''}{summary.glucoseChange}
-                      </Text>
-                    )}
-                  </View>
-                ) : (
-                  <Text style={styles.summaryNoData}>--</Text>
-                )}
-              </View>
-              <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>体重</Text>
-                {summary.latestWeight ? (
-                  <View style={styles.summaryValueContainer}>
-                    <Text style={styles.summaryValue}>{summary.latestWeight}</Text>
-                    <Text style={styles.summaryUnit}>kg</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.summaryNoData}>--</Text>
-                )}
-              </View>
-            </View>
-
-            {/* 詳細ボタン */}
-            <TouchableOpacity
-              style={styles.detailButton}
-              onPress={openStatsModal}
-            >
-              <Text style={styles.detailButtonText}>詳細</Text>
-            </TouchableOpacity>
-          </Animated.View>
-        </GestureDetector>
-
-        {/* アクションボタン */}
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.actionButton}
-            onPress={startEditProfile}
-          >
-            <Text style={styles.actionButtonText}>プロフィール編集</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.healthButton]}
-            onPress={startEditHealth}
-          >
-            <Text style={styles.healthButtonText}>健康情報設定</Text>
-          </TouchableOpacity>
-          
-          <TouchableOpacity 
-            style={[styles.actionButton, styles.addButton]}
-            onPress={() => setShowAddUser(true)}
-          >
-            <Text style={styles.addButtonText}>+ ユーザーを追加</Text>
-          </TouchableOpacity>
-        </View>
+    <ScrollView
+      style={styles.container}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {/* Greeting */}
+      <View style={styles.greetingSection}>
+        <Text style={styles.greetingText}>{getGreeting()}</Text>
+        <Text style={styles.dateText}>{formatDate()} {currentUser?.name}さん</Text>
       </View>
 
-      {/* プロフィール編集モーダル */}
-      <Modal
-        visible={showEditProfile}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowEditProfile(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.editModalContent}>
-            <Text style={styles.editModalTitle}>プロフィール編集</Text>
-            
-            <View style={styles.editFieldContainer}>
-              <Text style={styles.fieldLabel}>名前</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editName}
-                onChangeText={setEditName}
-                placeholder="名前を入力"
-                placeholderTextColor="#999"
-              />
-            </View>
-            
-            <View style={styles.editFieldContainer}>
-              <Text style={styles.fieldLabel}>年齢</Text>
-              <TextInput
-                style={styles.textInput}
-                value={editAge}
-                onChangeText={setEditAge}
-                placeholder="年齢を入力"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.editButtonContainer}>
+      {/* ===== Health Info Section ===== */}
+      <View style={styles.sectionHeader}>
+        <Ionicons name="heart" size={18} color="#E91E63" />
+        <Text style={styles.sectionHeaderText}>健康情報</Text>
+      </View>
+
+      {/* Blood glucose input */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>血糖値</Text>
+        <View style={styles.glucoseInputRow}>
+          <TextInput
+            style={styles.glucoseInput}
+            value={glucoseValue}
+            onChangeText={setGlucoseValue}
+            placeholder="値を入力"
+            placeholderTextColor="#999"
+            keyboardType="number-pad"
+          />
+          <Text style={styles.unit}>mg/dL</Text>
+          <View style={styles.mealTimingRow}>
+            {(['朝', '昼', '夜'] as MealTiming[]).map(timing => (
               <TouchableOpacity
-                style={[styles.editButton, styles.cancelButton]}
-                onPress={() => setShowEditProfile(false)}
+                key={timing}
+                style={[styles.timingButton, mealTiming === timing && styles.timingButtonActive]}
+                onPress={() => setMealTiming(timing)}
               >
-                <Text style={styles.cancelButtonText}>キャンセル</Text>
+                <Text style={[styles.timingText, mealTiming === timing && styles.timingTextActive]}>
+                  {timing}
+                </Text>
               </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.editButton, styles.saveButton]}
-                onPress={saveProfile}
-              >
-                <Text style={styles.saveButtonText}>保存</Text>
-              </TouchableOpacity>
-            </View>
+            ))}
           </View>
+          <TouchableOpacity style={styles.saveButton} onPress={saveGlucose}>
+            <Text style={styles.saveButtonText}>保存</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+        {latestGlucose && (
+          <Text style={styles.latestValue}>
+            直近: {latestGlucose.value} mg/dL（{latestGlucose.mealType}）
+          </Text>
+        )}
+      </View>
 
-      {/* ユーザー追加モーダル */}
-      <Modal
-        visible={showAddUser}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowAddUser(false)}
+      {/* Weight/BP accordion */}
+      <TouchableOpacity
+        style={styles.accordionHeader}
+        onPress={() => setShowExtraInputs(!showExtraInputs)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={styles.editModalContent}>
-            <Text style={styles.editModalTitle}>ユーザー追加</Text>
-            
-            <View style={styles.editFieldContainer}>
-              <Text style={styles.fieldLabel}>名前</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newName}
-                onChangeText={setNewName}
-                placeholder="名前を入力"
-                placeholderTextColor="#999"
-              />
-            </View>
-            
-            <View style={styles.editFieldContainer}>
-              <Text style={styles.fieldLabel}>年齢</Text>
-              <TextInput
-                style={styles.textInput}
-                value={newAge}
-                onChangeText={setNewAge}
-                placeholder="年齢を入力"
-                placeholderTextColor="#999"
-                keyboardType="numeric"
-              />
-            </View>
-            
-            <View style={styles.editButtonContainer}>
-              <TouchableOpacity
-                style={[styles.editButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowAddUser(false);
-                  setNewName('');
-                  setNewAge('');
-                }}
-              >
-                <Text style={styles.cancelButtonText}>キャンセル</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.editButton, styles.saveButton]}
-                onPress={addNewUser}
-              >
-                <Text style={styles.saveButtonText}>追加</Text>
-              </TouchableOpacity>
-            </View>
+        <Ionicons
+          name={showExtraInputs ? 'chevron-up' : 'chevron-down'}
+          size={20}
+          color="#666"
+        />
+        <Text style={styles.accordionHeaderText}>体重・血圧も記録する</Text>
+      </TouchableOpacity>
+
+      {showExtraInputs && (
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>体重</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.smallInput}
+              value={weightValue}
+              onChangeText={setWeightValue}
+              placeholder="体重"
+              placeholderTextColor="#999"
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.unit}>kg</Text>
           </View>
-        </View>
-      </Modal>
 
-      {/* 健康情報入力モーダル（カルテ風） */}
-      <Modal
-        visible={showHealthModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowHealthModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.healthModalContent}>
-            <Text style={styles.healthModalTitle}>健康カルテ</Text>
-            <Text style={styles.healthSubtitle}>糖尿病管理に必要な情報を入力してください</Text>
-            
-            <ScrollView style={styles.healthScrollView} showsVerticalScrollIndicator={false}>
-              {/* ユーザー選択セクション */}
-              {users.length > 1 && (
-                <View style={styles.healthSection}>
-                  <Text style={styles.healthSectionTitle}>👤 対象ユーザー</Text>
-                  <View style={styles.userSelectionContainer}>
-                    {users.map((user, index) => (
-                      <TouchableOpacity
-                        key={user.id}
-                        style={[
-                          styles.userSelectionOption,
-                          selectedHealthUserIndex === index && styles.userSelectionOptionActive
-                        ]}
-                        onPress={() => onHealthUserChange(index)}
-                      >
-                        <Text style={styles.userSelectionEmoji}>{user.avatar}</Text>
-                        <Text style={[
-                          styles.userSelectionName,
-                          selectedHealthUserIndex === index && styles.userSelectionNameActive
-                        ]}>{user.name}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                </View>
-              )}
-
-              {/* 基本情報セクション */}
-              <View style={styles.healthSection}>
-                <Text style={styles.healthSectionTitle}>📊 基本情報</Text>
-                
-                <View style={styles.healthRow}>
-                  <Text style={styles.healthLabel}>身長 (cm)</Text>
-                  <TextInput
-                    style={styles.healthInput}
-                    value={healthHeight}
-                    onChangeText={setHealthHeight}
-                    placeholder="170"
-                    keyboardType="numeric"
-                    placeholderTextColor="#999"
-                  />
-                </View>
-
-                <View style={styles.healthRow}>
-                  <Text style={styles.healthLabel}>体重 (kg)</Text>
-                  <TextInput
-                    style={styles.healthInput}
-                    value={healthWeight}
-                    onChangeText={setHealthWeight}
-                    placeholder="65"
-                    keyboardType="numeric"
-                    placeholderTextColor="#999"
-                  />
-                </View>
-
-                <View style={styles.healthRow}>
-                  <Text style={styles.healthLabel}>性別</Text>
-                  <View style={styles.genderContainer}>
-                    <TouchableOpacity
-                      style={[styles.genderButton, healthGender === 'male' && styles.genderButtonActive]}
-                      onPress={() => setHealthGender('male')}
-                    >
-                      <Text style={[styles.genderText, healthGender === 'male' && styles.genderTextActive]}>男性</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.genderButton, healthGender === 'female' && styles.genderButtonActive]}
-                      onPress={() => setHealthGender('female')}
-                    >
-                      <Text style={[styles.genderText, healthGender === 'female' && styles.genderTextActive]}>女性</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              </View>
-
-
-              {/* 活動レベルセクション */}
-              <View style={styles.healthSection}>
-                <Text style={styles.healthSectionTitle}>🏃‍♀️ 運動レベル</Text>
-                
-                <TouchableOpacity
-                  style={[styles.activityOption, healthActivity === 'light' && styles.activityOptionActive]}
-                  onPress={() => setHealthActivity('light')}
-                >
-                  <Text style={[styles.activityTitle, healthActivity === 'light' && styles.activityTitleActive]}>軽度</Text>
-                  <Text style={styles.activityDescription}>デスクワーク中心、運動習慣なし</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.activityOption, healthActivity === 'moderate' && styles.activityOptionActive]}
-                  onPress={() => setHealthActivity('moderate')}
-                >
-                  <Text style={[styles.activityTitle, healthActivity === 'moderate' && styles.activityTitleActive]}>中程度</Text>
-                  <Text style={styles.activityDescription}>立ち仕事、週2-3回の軽い運動</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.activityOption, healthActivity === 'high' && styles.activityOptionActive]}
-                  onPress={() => setHealthActivity('high')}
-                >
-                  <Text style={[styles.activityTitle, healthActivity === 'high' && styles.activityTitleActive]}>高度</Text>
-                  <Text style={styles.activityDescription}>肉体労働、週4回以上の運動習慣</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-            
-            <View style={styles.healthButtonContainer}>
-              <TouchableOpacity
-                style={[styles.editButton, styles.cancelButton]}
-                onPress={() => setShowHealthModal(false)}
-              >
-                <Text style={styles.cancelButtonText}>キャンセル</Text>
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.editButton, styles.saveButton]}
-                onPress={saveHealthData}
-              >
-                <Text style={styles.saveButtonText}>保存</Text>
-              </TouchableOpacity>
-            </View>
+          <Text style={[styles.cardTitle, { marginTop: 12 }]}>血圧</Text>
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.smallInput}
+              value={systolicValue}
+              onChangeText={setSystolicValue}
+              placeholder="上"
+              placeholderTextColor="#999"
+              keyboardType="number-pad"
+            />
+            <Text style={styles.unit}>/</Text>
+            <TextInput
+              style={styles.smallInput}
+              value={diastolicValue}
+              onChangeText={setDiastolicValue}
+              placeholder="下"
+              placeholderTextColor="#999"
+              keyboardType="number-pad"
+            />
+            <Text style={styles.unit}>mmHg</Text>
           </View>
+
+          <TouchableOpacity style={styles.saveButton} onPress={saveWeightAndBP}>
+            <Text style={styles.saveButtonText}>保存</Text>
+          </TouchableOpacity>
         </View>
-      </Modal>
+      )}
 
-      {/* ユーザー詳細表示モーダル */}
-      <Modal
-        visible={showUserDetailModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowUserDetailModal(false)}
-      >
+      {/* ===== Meal Section ===== */}
+      <View style={[styles.sectionHeader, { marginTop: 24 }]}>
+        <Ionicons name="restaurant" size={18} color="#FF9800" />
+        <Text style={styles.sectionHeaderText}>献立</Text>
+      </View>
+
+      {/* Today's meals */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>今日の献立</Text>
+        {todayMeals.length > 0 ? (
+          <View style={styles.mealCardsRow}>
+            {todayMeals.map((meal, index) => {
+              const timings = ['朝', '昼', '夜'];
+              return (
+                <TouchableOpacity
+                  key={meal.id}
+                  style={styles.mealCard}
+                  onPress={() => { setSelectedMealDetail(meal); setShowMealModal(true); }}
+                >
+                  <Text style={styles.mealCardTiming}>{timings[index] || ''}</Text>
+                  <Text style={styles.mealCardName} numberOfLines={2}>{meal.name}</Text>
+                  <Text style={styles.mealCardCalories}>{meal.calories}kcal</Text>
+                  <TouchableOpacity
+                    style={styles.favoriteButton}
+                    onPress={() => toggleFavorite(meal)}
+                  >
+                    <Ionicons
+                      name={favoriteIds.has(meal.id) ? 'star' : 'star-outline'}
+                      size={20}
+                      color={favoriteIds.has(meal.id) ? '#FFD700' : '#ccc'}
+                    />
+                  </TouchableOpacity>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>献立タブから献立を生成してください</Text>
+        )}
+      </View>
+
+      {/* Nutrition summary */}
+      <View style={styles.card}>
+        <DailyNutritionSummary date={today} />
+      </View>
+
+      {/* Update tomorrow's meals */}
+      <View style={styles.card}>
+        <Text style={styles.cardTitle}>明日の献立を更新</Text>
+        <Text style={styles.updateMessage}>{updateMessage}</Text>
+        <TouchableOpacity
+          style={[styles.updateButton, isUpdating && styles.updateButtonDisabled]}
+          onPress={handleUpdateMeals}
+          disabled={isUpdating}
+        >
+          <Ionicons name="refresh" size={20} color="#fff" />
+          <Text style={styles.updateButtonText}>
+            {isUpdating ? '更新中...' : '更新する'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* Recipe detail modal */}
+      <Modal visible={showMealModal} animationType="slide" transparent>
         <View style={styles.modalOverlay}>
-          <View style={styles.detailModalContent}>
-            <Text style={styles.detailModalTitle}>{currentUser.name} の詳細情報</Text>
-            
-            <ScrollView style={styles.detailScrollView} showsVerticalScrollIndicator={false}>
-              {/* 基本情報 */}
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>👤 基本情報</Text>
-                <Text style={styles.detailItem}>名前: {currentUser.name}</Text>
-                <Text style={styles.detailItem}>年齢: {currentUser.age}歳</Text>
-              </View>
-
-              {/* 健康情報 */}
-              <View style={styles.detailSection}>
-                <Text style={styles.detailSectionTitle}>🏥 健康情報</Text>
-                {currentUser.healthData ? (
-                  <>
-                    {currentUser.healthData.height && (
-                      <Text style={styles.detailItem}>身長: {currentUser.healthData.height}cm</Text>
-                    )}
-                    {currentUser.healthData.weight && (
-                      <Text style={styles.detailItem}>体重: {currentUser.healthData.weight}kg</Text>
-                    )}
-                    {currentUser.healthData.height && currentUser.healthData.weight && (
-                      <Text style={styles.detailItem}>
-                        BMI: {(currentUser.healthData.weight / Math.pow(currentUser.healthData.height / 100, 2)).toFixed(1)}
-                      </Text>
-                    )}
-                    <Text style={styles.detailItem}>
-                      性別: {currentUser.healthData.gender === 'male' ? '男性' : '女性'}
-                    </Text>
-                    <Text style={styles.detailItem}>
-                      運動レベル: {
-                        currentUser.healthData.activityLevel === 'light' ? '軽度' :
-                        currentUser.healthData.activityLevel === 'moderate' ? '中程度' : '高度'
-                      }
-                    </Text>
-                  </>
-                ) : (
-                  <Text style={styles.noHealthData}>健康情報が未設定です</Text>
-                )}
-              </View>
-            </ScrollView>
-            
+          <View style={styles.modalContent}>
             <TouchableOpacity
-              style={styles.detailCloseButton}
-              onPress={() => setShowUserDetailModal(false)}
+              style={styles.modalClose}
+              onPress={() => setShowMealModal(false)}
             >
-              <Text style={styles.detailCloseText}>閉じる</Text>
+              <Ionicons name="close" size={24} color="#333" />
             </TouchableOpacity>
+            {selectedMealDetail && (
+              <ScrollView>
+                <Text style={styles.modalTitle}>{selectedMealDetail.name}</Text>
+                <Text style={styles.modalDescription}>{selectedMealDetail.description}</Text>
+
+                <View style={styles.nutritionRow}>
+                  <Text style={styles.nutritionItem}>{selectedMealDetail.calories}kcal</Text>
+                  <Text style={styles.nutritionItem}>糖質{selectedMealDetail.carbs}g</Text>
+                  <Text style={styles.nutritionItem}>タンパク{selectedMealDetail.protein}g</Text>
+                  <Text style={styles.nutritionItem}>脂質{selectedMealDetail.fat}g</Text>
+                </View>
+
+                <Text style={styles.modalSectionTitle}>材料</Text>
+                {selectedMealDetail.ingredients.map((ing, i) => (
+                  <Text key={i} style={styles.ingredientText}>・{ing}</Text>
+                ))}
+
+                <Text style={styles.modalSectionTitle}>作り方</Text>
+                {selectedMealDetail.recipe.map((step, i) => (
+                  <Text key={i} style={styles.recipeStep}>{i + 1}. {step}</Text>
+                ))}
+              </ScrollView>
+            )}
           </View>
         </View>
       </Modal>
 
-      {/* 設定モーダル */}
-      <Modal
-        visible={showSettingsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowSettingsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.editModalContent}>
-            <Text style={styles.editModalTitle}>設定</Text>
-            
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>🔧 アプリ設定</Text>
-              <Text style={styles.detailItem}>• データのバックアップ</Text>
-              <Text style={styles.detailItem}>• プライバシー設定</Text>
-              <Text style={styles.detailItem}>• 通知設定</Text>
-            </View>
-
-            <View style={styles.detailSection}>
-              <Text style={styles.detailSectionTitle}>ℹ️ アプリ情報</Text>
-              <Text style={styles.detailItem}>バージョン: 1.0.0</Text>
-              <Text style={styles.detailItem}>© 2024 SmartMeals</Text>
-            </View>
-            
-            <TouchableOpacity
-              style={styles.detailCloseButton}
-              onPress={() => setShowSettingsModal(false)}
-            >
-              <Text style={styles.detailCloseText}>閉じる</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* 統計モーダル */}
-      <Modal
-        visible={showStatsModal}
-        transparent={true}
-        animationType="slide"
-        onRequestClose={() => setShowStatsModal(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.statsModalContent}>
-            <Text style={styles.statsModalTitle}>{currentUser.name} の記録と統計</Text>
-
-            {/* 期間選択 */}
-            <View style={styles.timeRangeContainer}>
-              {(['1week', '1month', '3months'] as TimeRange[]).map((range) => (
-                <TouchableOpacity
-                  key={range}
-                  style={[
-                    styles.timeRangeButton,
-                    timeRange === range && styles.timeRangeButtonActive
-                  ]}
-                  onPress={() => setTimeRange(range)}
-                >
-                  <Text style={[
-                    styles.timeRangeText,
-                    timeRange === range && styles.timeRangeTextActive
-                  ]}>
-                    {range === '1week' ? '1週間' : range === '1month' ? '1ヶ月' : '3ヶ月'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            <ScrollView style={styles.statsScrollView} showsVerticalScrollIndicator={false}>
-              {/* 血糖値統計 */}
-              <View style={styles.statsSection}>
-                <Text style={styles.statsSectionTitle}>血糖値</Text>
-                {(() => {
-                  const now = Date.now();
-                  const rangeMs = timeRange === '1week' ? 7 * 24 * 60 * 60 * 1000
-                    : timeRange === '1month' ? 30 * 24 * 60 * 60 * 1000
-                    : 90 * 24 * 60 * 60 * 1000;
-                  const filteredRecords = glucoseRecords
-                    .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
-                    .filter(r => r.timestamp >= now - rangeMs);
-
-                  if (filteredRecords.length === 0) {
-                    return <Text style={styles.noDataText}>データがありません</Text>;
-                  }
-
-                  const avg = Math.round(filteredRecords.reduce((sum, r) => sum + r.value, 0) / filteredRecords.length);
-                  const max = Math.max(...filteredRecords.map(r => r.value));
-                  const min = Math.min(...filteredRecords.map(r => r.value));
-
-                  return (
-                    <View style={styles.statsGrid}>
-                      <View style={styles.statsGridItem}>
-                        <Text style={styles.statsGridLabel}>平均</Text>
-                        <View style={styles.statsValueRow}>
-                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(avg) }]} />
-                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(avg) }]}>{avg}</Text>
-                        </View>
-                        <Text style={styles.statsGridUnit}>mg/dL</Text>
-                      </View>
-                      <View style={styles.statsGridItem}>
-                        <Text style={styles.statsGridLabel}>最高</Text>
-                        <View style={styles.statsValueRow}>
-                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(max) }]} />
-                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(max) }]}>{max}</Text>
-                        </View>
-                        <Text style={styles.statsGridUnit}>mg/dL</Text>
-                      </View>
-                      <View style={styles.statsGridItem}>
-                        <Text style={styles.statsGridLabel}>最低</Text>
-                        <View style={styles.statsValueRow}>
-                          <View style={[styles.statsColorIndicator, { backgroundColor: getGlucoseColor(min) }]} />
-                          <Text style={[styles.statsGridValue, { color: getGlucoseColor(min) }]}>{min}</Text>
-                        </View>
-                        <Text style={styles.statsGridUnit}>mg/dL</Text>
-                      </View>
-                      <View style={styles.statsGridItem}>
-                        <Text style={styles.statsGridLabel}>記録数</Text>
-                        <Text style={styles.statsGridValue}>{filteredRecords.length}</Text>
-                        <Text style={styles.statsGridUnit}>回</Text>
-                      </View>
-                    </View>
-                  );
-                })()}
-              </View>
-
-              {/* 体重推移 */}
-              <View style={styles.statsSection}>
-                <Text style={styles.statsSectionTitle}>体重記録</Text>
-                {(() => {
-                  const userWeightRecords = weeklyRecords
-                    .filter(r => r.userId === currentUser.id || (!r.userId && currentUserIndex === 0))
-                    .filter(r => r.weight !== null)
-                    .sort((a, b) => b.timestamp - a.timestamp)
-                    .slice(0, 5);
-
-                  if (userWeightRecords.length === 0) {
-                    return <Text style={styles.noDataText}>データがありません</Text>;
-                  }
-
-                  return (
-                    <View>
-                      {userWeightRecords.map((record, index) => (
-                        <View key={record.id} style={styles.weightRecordItem}>
-                          <Text style={styles.weightRecordDate}>
-                            {new Date(record.timestamp).toLocaleDateString('ja-JP')}
-                          </Text>
-                          <Text style={styles.weightRecordValue}>{record.weight} kg</Text>
-                        </View>
-                      ))}
-                    </View>
-                  );
-                })()}
-              </View>
-
-              {/* 血糖値の目安 */}
-              <View style={styles.statsSection}>
-                <Text style={styles.statsSectionTitle}>血糖値の目安</Text>
-                <View style={styles.referenceItem}>
-                  <View style={[styles.colorIndicator, { backgroundColor: '#4CAF50' }]} />
-                  <Text style={styles.referenceText}>正常値: 70-109 mg/dL（空腹時）</Text>
-                </View>
-                <View style={styles.referenceItem}>
-                  <View style={[styles.colorIndicator, { backgroundColor: '#FF9800' }]} />
-                  <Text style={styles.referenceText}>境界型: 110-125 mg/dL</Text>
-                </View>
-                <View style={styles.referenceItem}>
-                  <View style={[styles.colorIndicator, { backgroundColor: '#F44336' }]} />
-                  <Text style={styles.referenceText}>糖尿病型: 126 mg/dL以上</Text>
-                </View>
-              </View>
-            </ScrollView>
-
-            <TouchableOpacity
-              style={styles.detailCloseButton}
-              onPress={() => setShowStatsModal(false)}
-            >
-              <Text style={styles.detailCloseText}>閉じる</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-    </SafeAreaView>
+      <View style={{ height: 40 }} />
+    </ScrollView>
   );
 }
 
@@ -1022,560 +514,257 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',
-    paddingHorizontal: 20,
   },
-  swipeContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  greetingSection: {
+    padding: 20,
+    paddingBottom: 8,
   },
-  profileCard: {
-    width: width * 0.85,
-    backgroundColor: '#fff',
-    borderRadius: 24,
-    padding: 24,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 15,
-    elevation: 12,
-  },
-  avatarContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#f0f0f0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  avatarEmoji: {
-    fontSize: 40,
-  },
-  userName: {
-    fontSize: 26,
-    fontWeight: '700',
+  greetingText: {
+    fontSize: 22,
+    fontWeight: 'bold',
     color: '#333',
-    marginBottom: 2,
   },
-  userAge: {
+  dateText: {
     fontSize: 16,
     color: '#666',
-    marginBottom: 15,
+    marginTop: 4,
   },
-  actionButtons: {
-    marginTop: 20,
-    width: width * 0.85,
-    paddingBottom: 80,
-  },
-  actionButton: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    paddingVertical: 12,
-    marginBottom: 10,
+  sectionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 5,
-    elevation: 3,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    gap: 6,
   },
-  actionButtonText: {
-    fontSize: 16,
-    color: '#333',
+  sectionHeaderText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#666',
+    letterSpacing: 1,
   },
-  addButton: {
+  card: {
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginVertical: 6,
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  glucoseInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  glucoseInput: {
+    flex: 1,
+    minWidth: 80,
+    backgroundColor: '#f9f9f9',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 18,
+    fontWeight: '600',
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    color: '#333',
+  },
+  unit: {
+    fontSize: 14,
+    color: '#666',
+  },
+  mealTimingRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  timingButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+  },
+  timingButtonActive: {
     backgroundColor: '#007AFF',
   },
-  addButtonText: {
+  timingText: {
+    fontSize: 14,
+    color: '#666',
+  },
+  timingTextActive: {
     color: '#fff',
-    fontWeight: 'bold',
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  editModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 30,
-    width: width * 0.85,
-    maxWidth: 400,
-  },
-  editModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 30,
-    color: '#333',
-  },
-  editFieldContainer: {
-    marginBottom: 20,
-  },
-  fieldLabel: {
-    fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  textInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 12,
-    padding: 15,
-    fontSize: 16,
-    backgroundColor: '#f8f9fa',
-    color: '#333',
-  },
-  editButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  editButton: {
-    flex: 1,
-    paddingVertical: 15,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  cancelButton: {
-    backgroundColor: '#f8f9fa',
-    marginRight: 10,
   },
   saveButton: {
     backgroundColor: '#007AFF',
-    marginLeft: 10,
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    alignItems: 'center',
+    marginTop: 8,
   },
   saveButtonText: {
-    fontSize: 16,
     color: '#fff',
-    fontWeight: 'bold',
-  },
-  healthButton: {
-    backgroundColor: '#28a745',
-  },
-  healthButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-  },
-  healthModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    margin: 20,
-    maxHeight: '90%',
-  },
-  healthModalTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 5,
-    color: '#333',
-  },
-  healthSubtitle: {
     fontSize: 14,
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#666',
-    fontStyle: 'italic',
-  },
-  healthScrollView: {
-    maxHeight: '75%',
-  },
-  healthSection: {
-    marginBottom: 25,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-  },
-  healthSectionTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 8,
-  },
-  healthRow: {
-    marginBottom: 15,
-  },
-  healthLabel: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  healthInput: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    backgroundColor: '#fff',
-    color: '#333',
-  },
-  healthNote: {
-    fontSize: 12,
-    color: '#666',
-    fontStyle: 'italic',
-    marginTop: 5,
-  },
-  genderContainer: {
-    flexDirection: 'row',
-  },
-  genderButton: {
-    flex: 1,
-    padding: 12,
-    borderRadius: 8,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginRight: 10,
-    alignItems: 'center',
-  },
-  genderButtonActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  genderText: {
-    fontSize: 16,
-    color: '#333',
     fontWeight: '600',
   },
-  genderTextActive: {
-    color: '#fff',
-  },
-  activityOption: {
-    padding: 15,
-    borderRadius: 10,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    marginBottom: 10,
-  },
-  activityOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  activityTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  activityTitleActive: {
-    color: '#fff',
-  },
-  activityDescription: {
-    fontSize: 14,
-    color: '#666',
-  },
-  healthButtonContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 20,
-  },
-  cardTouchable: {
-    width: width * 0.85,
-    alignItems: 'center',
-  },
-  userSelectionContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  userSelectionOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 10,
-    padding: 10,
-    margin: 5,
-    minWidth: 100,
-  },
-  userSelectionOptionActive: {
-    backgroundColor: '#007AFF',
-    borderColor: '#007AFF',
-  },
-  userSelectionEmoji: {
-    fontSize: 20,
-    marginRight: 8,
-  },
-  userSelectionName: {
-    fontSize: 14,
-    color: '#333',
-    fontWeight: '600',
-  },
-  userSelectionNameActive: {
-    color: '#fff',
-  },
-  detailModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    margin: 20,
-    maxHeight: '80%',
-  },
-  detailModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 20,
-    color: '#333',
-  },
-  detailScrollView: {
-    maxHeight: '80%',
-  },
-  detailSection: {
-    marginBottom: 20,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-  },
-  detailSectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 5,
-  },
-  detailItem: {
-    fontSize: 14,
-    color: '#333',
-    marginBottom: 5,
-    paddingLeft: 10,
-  },
-  noHealthData: {
-    fontSize: 14,
-    color: '#999',
-    fontStyle: 'italic',
-    textAlign: 'center',
-    padding: 20,
-  },
-  detailCloseButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 12,
-    padding: 15,
-    marginTop: 10,
-  },
-  detailCloseText: {
-    fontSize: 16,
-    color: '#fff',
-    textAlign: 'center',
-    fontWeight: 'bold',
-  },
-  // サマリー表示用スタイル
-  summaryContainer: {
-    width: '100%',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 12,
+  latestValue: {
+    fontSize: 13,
+    color: '#888',
     marginTop: 8,
-    marginBottom: 12,
   },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  summaryLabel: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-  },
-  summaryValueContainer: {
+  accordionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-  },
-  glucoseIndicator: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    marginRight: 6,
-  },
-  summaryValue: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  summaryUnit: {
-    fontSize: 14,
-    color: '#666',
-    marginLeft: 4,
-  },
-  summaryChange: {
-    fontSize: 14,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  changeGood: {
-    color: '#4CAF50',
-  },
-  changeBad: {
-    color: '#F44336',
-  },
-  summaryNoData: {
-    fontSize: 18,
-    color: '#ccc',
-  },
-  detailButton: {
-    backgroundColor: '#007AFF',
-    borderRadius: 20,
+    paddingHorizontal: 20,
     paddingVertical: 10,
-    paddingHorizontal: 30,
+    gap: 6,
   },
-  detailButtonText: {
-    fontSize: 16,
-    color: '#fff',
-    fontWeight: '600',
+  accordionHeaderText: {
+    fontSize: 14,
+    color: '#666',
   },
-  // 統計モーダル用スタイル
-  statsModalContent: {
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    padding: 20,
-    margin: 20,
-    maxHeight: '85%',
-  },
-  statsModalTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    textAlign: 'center',
-    marginBottom: 15,
-    color: '#333',
-  },
-  timeRangeContainer: {
+  inputRow: {
     flexDirection: 'row',
-    backgroundColor: '#f0f0f0',
-    borderRadius: 10,
-    padding: 4,
-    marginBottom: 15,
+    alignItems: 'center',
+    gap: 8,
   },
-  timeRangeButton: {
+  smallInput: {
     flex: 1,
-    paddingVertical: 10,
-    alignItems: 'center',
+    backgroundColor: '#f9f9f9',
     borderRadius: 8,
-  },
-  timeRangeButtonActive: {
-    backgroundColor: '#007AFF',
-  },
-  timeRangeText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '600',
-  },
-  timeRangeTextActive: {
-    color: '#fff',
-  },
-  statsScrollView: {
-    maxHeight: '70%',
-  },
-  statsSection: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-  },
-  statsSectionTitle: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    paddingBottom: 8,
-  },
-  noDataText: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    fontStyle: 'italic',
     padding: 10,
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    color: '#333',
   },
-  statsGrid: {
+  mealCardsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
+    gap: 8,
   },
-  statsGridItem: {
-    width: '48%',
-    backgroundColor: '#fff',
+  mealCard: {
+    flex: 1,
+    backgroundColor: '#f9f9f9',
     borderRadius: 10,
     padding: 12,
-    marginBottom: 10,
     alignItems: 'center',
+    position: 'relative',
   },
-  statsGridLabel: {
+  mealCardTiming: {
     fontSize: 12,
-    color: '#666',
+    color: '#999',
     marginBottom: 4,
   },
-  statsValueRow: {
+  mealCardName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  mealCardCalories: {
+    fontSize: 12,
+    color: '#666',
+  },
+  favoriteButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    padding: 4,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  updateMessage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 12,
+  },
+  updateButton: {
+    backgroundColor: '#4CAF50',
+    borderRadius: 10,
+    padding: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
-  statsColorIndicator: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 4,
+  updateButtonDisabled: {
+    opacity: 0.6,
   },
-  statsGridValue: {
+  updateButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+    maxHeight: '80%',
+  },
+  modalClose: {
+    alignSelf: 'flex-end',
+    padding: 4,
+  },
+  modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  statsGridUnit: {
-    fontSize: 11,
-    color: '#999',
-  },
-  weightRecordItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
+    color: '#333',
     marginBottom: 8,
   },
-  weightRecordDate: {
+  modalDescription: {
     fontSize: 14,
     color: '#666',
+    marginBottom: 16,
   },
-  weightRecordValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#007AFF',
-  },
-  referenceItem: {
+  nutritionRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    justifyContent: 'space-around',
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  nutritionItem: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#333',
+  },
+  modalSectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 12,
     marginBottom: 8,
   },
-  colorIndicator: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    marginRight: 10,
+  ingredientText: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 2,
   },
-  referenceText: {
-    fontSize: 13,
-    color: '#666',
+  recipeStep: {
+    fontSize: 14,
+    color: '#555',
+    marginBottom: 6,
+    lineHeight: 20,
   },
 });

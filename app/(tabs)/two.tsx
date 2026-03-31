@@ -328,10 +328,10 @@ export default function MealPlanScreen() {
     setSelectedMeal({
       ...selectedMeal,
       ingredients: newIngredients,
-      calories: selectedMeal.calories + diff.calories,
-      carbs: Math.max(0, selectedMeal.carbs + diff.carbs),
-      protein: Math.max(0, selectedMeal.protein + diff.protein),
-      fat: Math.max(0, selectedMeal.fat + diff.fat),
+      calories: Math.round(Math.max(0, selectedMeal.calories + diff.calories)),
+      carbs: Math.round(Math.max(0, selectedMeal.carbs + diff.carbs) * 10) / 10,
+      protein: Math.round(Math.max(0, selectedMeal.protein + diff.protein) * 10) / 10,
+      fat: Math.round(Math.max(0, selectedMeal.fat + diff.fat) * 10) / 10,
     });
     setShowSubstModal(false);
   };

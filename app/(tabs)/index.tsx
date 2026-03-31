@@ -450,10 +450,10 @@ export default function DashboardScreen() {
     setSelectedMealDetail({
       ...selectedMealDetail,
       ingredients: newIngredients,
-      calories: selectedMealDetail.calories + diff.calories,
-      carbs: Math.max(0, selectedMealDetail.carbs + diff.carbs),
-      protein: Math.max(0, selectedMealDetail.protein + diff.protein),
-      fat: Math.max(0, selectedMealDetail.fat + diff.fat),
+      calories: Math.round(Math.max(0, selectedMealDetail.calories + diff.calories)),
+      carbs: Math.round(Math.max(0, selectedMealDetail.carbs + diff.carbs) * 10) / 10,
+      protein: Math.round(Math.max(0, selectedMealDetail.protein + diff.protein) * 10) / 10,
+      fat: Math.round(Math.max(0, selectedMealDetail.fat + diff.fat) * 10) / 10,
     });
     setShowSubstModal(false);
   };

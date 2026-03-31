@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, Tabs, useRouter } from 'expo-router';
-import { Pressable, TouchableOpacity, Alert, View, StyleSheet } from 'react-native';
+import { TouchableOpacity, View, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SettingsScreen from '../../components/SettingsScreen';
 
@@ -16,17 +16,6 @@ function TabBarIcon(props: {
   color: string;
 }) {
   return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
-}
-
-// +ボタン用のカスタムアイコン
-function PlusButtonIcon({ focused }: { focused: boolean }) {
-  return (
-    <View style={styles.plusButtonContainer}>
-      <View style={styles.plusButton}>
-        <Ionicons name="add" size={32} color="#fff" />
-      </View>
-    </View>
-  );
 }
 
 // 設定ボタンコンポーネント
@@ -91,18 +80,10 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'ユーザー',
-          tabBarIcon: ({ color }) => <TabBarIcon name="user" color={color} />,
+          title: '今日',
+          tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
           headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
-        }}
-      />
-      <Tabs.Screen
-        name="record"
-        options={{
-          title: '',
-          tabBarIcon: ({ focused }) => <PlusButtonIcon focused={focused} />,
-          headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
-          headerTitle: '記録',
+          headerTitle: '今日',
         }}
       />
       <Tabs.Screen
@@ -111,6 +92,12 @@ export default function TabLayout() {
           title: '献立',
           tabBarIcon: ({ color }) => <TabBarIcon name="cutlery" color={color} />,
           headerRight: () => <SettingsButton onPress={handleSettingsPress} />,
+        }}
+      />
+      <Tabs.Screen
+        name="record"
+        options={{
+          href: null,
         }}
       />
     </Tabs>
@@ -123,24 +110,4 @@ export default function TabLayout() {
   );
 }
 
-const styles = StyleSheet.create({
-  plusButtonContainer: {
-    position: 'relative',
-    alignItems: 'center',
-    justifyContent: 'center',
-    top: -15,
-  },
-  plusButton: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: '#007AFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#007AFF',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-});
+const styles = StyleSheet.create({});

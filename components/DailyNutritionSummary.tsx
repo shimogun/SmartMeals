@@ -6,6 +6,10 @@ import { GeneratedMeal } from '../types';
 interface DailyNutritionSummaryProps {
   date: string; // YYYY-MM-DD
   meals?: GeneratedMeal[];
+  medicalGuidance?: {
+    dailyCarbLimit?: number;
+    dailyCalorieLimit?: number;
+  };
 }
 
 // 日次栄養目標（糖尿病管理向けデフォルト値）
@@ -76,9 +80,15 @@ const NutrientBar = ({ label, value, target, unit }: {
   );
 };
 
-export default function DailyNutritionSummary({ date, meals: propMeals }: DailyNutritionSummaryProps) {
+export default function DailyNutritionSummary({ date, meals: propMeals, medicalGuidance }: DailyNutritionSummaryProps) {
   const [meals, setMeals] = useState<GeneratedMeal[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const targets = {
+    ...DAILY_TARGETS,
+    ...(medicalGuidance?.dailyCalorieLimit ? { calories: medicalGuidance.dailyCalorieLimit } : {}),
+    ...(medicalGuidance?.dailyCarbLimit ? { carbs: medicalGuidance.dailyCarbLimit } : {}),
+  };
 
   useEffect(() => {
     if (propMeals) {
@@ -135,6 +145,11 @@ export default function DailyNutritionSummary({ date, meals: propMeals }: DailyN
     { calories: 0, carbs: 0, protein: 0, fat: 0 }
   );
 
+  const hasOverage = medicalGuidance && (
+    (medicalGuidance.dailyCalorieLimit && totals.calories > medicalGuidance.dailyCalorieLimit) ||
+    (medicalGuidance.dailyCarbLimit && totals.carbs > medicalGuidance.dailyCarbLimit)
+  );
+
   // 食事カテゴリ別に分類
   const mealsByCategory: { [key: string]: GeneratedMeal[] } = {};
   for (const meal of meals) {
@@ -152,30 +167,36 @@ export default function DailyNutritionSummary({ date, meals: propMeals }: DailyN
     <View style={styles.container}>
       <Text style={styles.sectionTitle}>今日の栄養</Text>
 
+      {hasOverage && (
+        <View style={styles.warningBanner}>
+          <Text style={styles.warningText}>指導値を超えています</Text>
+        </View>
+      )}
+
       {/* 栄養素プログレスバー */}
       <View style={styles.barsContainer}>
         <NutrientBar
           label="カロリー"
           value={totals.calories}
-          target={DAILY_TARGETS.calories}
+          target={targets.calories}
           unit="kcal"
         />
         <NutrientBar
           label="炭水化物"
           value={totals.carbs}
-          target={DAILY_TARGETS.carbs}
+          target={targets.carbs}
           unit="g"
         />
         <NutrientBar
           label="たんぱく質"
           value={totals.protein}
-          target={DAILY_TARGETS.protein}
+          target={targets.protein}
           unit="g"
         />
         <NutrientBar
           label="脂質"
           value={totals.fat}
-          target={DAILY_TARGETS.fat}
+          target={targets.fat}
           unit="g"
         />
       </View>
@@ -303,4 +324,6 @@ const styles = StyleSheet.create({
     flex: 1,
     textAlign: 'right',
   },
+  warningBanner: { backgroundColor: '#FFEBEE', borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
+  warningText: { color: '#F44336', fontSize: 13, fontWeight: '600' },
 });

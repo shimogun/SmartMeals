@@ -17,6 +17,8 @@ import { User, GeneratedMeal, SavedMealPlan, UserHealthProfile, GlucoseRecord } 
 import localMealEngine from '../../services/localMealEngine';
 import mealStorageService from '../../services/mealStorageService';
 import favoritesService, { FavoriteMeal } from '../../services/favoritesService';
+import * as Clipboard from 'expo-clipboard';
+import shoppingListService, { ShoppingItem, ShoppingList } from '../../services/shoppingListService';
 
 // ============================================================
 // Types
@@ -50,6 +52,11 @@ export default function MealPlanScreen() {
   // Recipe detail modal
   const [selectedMeal, setSelectedMeal] = useState<GeneratedMeal | null>(null);
   const [showRecipeModal, setShowRecipeModal] = useState(false);
+
+  // Shopping list modal
+  const [showShoppingModal, setShowShoppingModal] = useState(false);
+  const [shoppingList, setShoppingList] = useState<ShoppingList | null>(null);
+  const [checkedItems, setCheckedItems] = useState<Set<string>>(new Set());
 
   // ============================================================
   // Data Loading
@@ -249,6 +256,36 @@ export default function MealPlanScreen() {
   const handleOpenRecipe = (meal: GeneratedMeal) => {
     setSelectedMeal(meal);
     setShowRecipeModal(true);
+  };
+
+  const openShoppingList = async (plan: SavedMealPlan) => {
+    const list = shoppingListService.generateFromPlan(plan);
+    const checked = await shoppingListService.loadCheckedState(plan.id);
+    setShoppingList(list);
+    setCheckedItems(new Set(checked));
+    setShowShoppingModal(true);
+  };
+
+  const toggleShoppingItem = async (itemName: string) => {
+    if (!shoppingList) return;
+    const newChecked = new Set(checkedItems);
+    if (newChecked.has(itemName)) {
+      newChecked.delete(itemName);
+    } else {
+      newChecked.add(itemName);
+    }
+    setCheckedItems(newChecked);
+    await shoppingListService.saveCheckedState(shoppingList.planId, Array.from(newChecked));
+  };
+
+  const copyShoppingList = async () => {
+    if (!shoppingList || !selectedPlan) return;
+    const text = shoppingListService.formatAsText(
+      shoppingList,
+      selectedPlan.name || `${selectedPlan.startDate}〜の献立`
+    );
+    await Clipboard.setStringAsync(text);
+    Alert.alert('コピー完了', '買い物リストをクリップボードにコピーしました');
   };
 
   // ============================================================
@@ -521,6 +558,13 @@ export default function MealPlanScreen() {
                       ))}
                     </View>
                   ))}
+                <TouchableOpacity
+                  style={styles.shoppingButton}
+                  onPress={() => selectedPlan && openShoppingList(selectedPlan)}
+                >
+                  <Ionicons name="cart-outline" size={20} color="#fff" />
+                  <Text style={styles.shoppingButtonText}>買い物リストを見る</Text>
+                </TouchableOpacity>
             </ScrollView>
           </View>
         </View>
@@ -597,6 +641,63 @@ export default function MealPlanScreen() {
                 </>
               )}
             </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Shopping list modal */}
+      <Modal visible={showShoppingModal} animationType="slide" transparent>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxHeight: '85%' }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>買い物リスト</Text>
+              <TouchableOpacity onPress={() => setShowShoppingModal(false)}>
+                <Ionicons name="close" size={24} color="#333" />
+              </TouchableOpacity>
+            </View>
+            {shoppingList && (
+              <ScrollView>
+                {(() => {
+                  let currentCategory = '';
+                  return shoppingList.items.map((item, index) => {
+                    const showCategory = item.category !== currentCategory;
+                    currentCategory = item.category;
+                    return (
+                      <View key={index}>
+                        {showCategory && (
+                          <Text style={styles.shoppingCategory}>{item.category}</Text>
+                        )}
+                        <TouchableOpacity
+                          style={styles.shoppingItem}
+                          onPress={() => toggleShoppingItem(item.name)}
+                        >
+                          <Ionicons
+                            name={checkedItems.has(item.name) ? 'checkbox' : 'square-outline'}
+                            size={22}
+                            color={checkedItems.has(item.name) ? '#4CAF50' : '#999'}
+                          />
+                          <Text style={[
+                            styles.shoppingItemName,
+                            checkedItems.has(item.name) && styles.shoppingItemChecked,
+                          ]}>
+                            {item.name}
+                          </Text>
+                          {item.amounts.length > 0 && (
+                            <Text style={styles.shoppingItemAmount}>
+                              {item.amounts.join('、')}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    );
+                  });
+                })()}
+              </ScrollView>
+            )}
+            <TouchableOpacity style={styles.copyButton} onPress={copyShoppingList}>
+              <Ionicons name="copy-outline" size={18} color="#fff" />
+              <Text style={styles.copyButtonText}>テキストをコピー</Text>
+            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -1022,5 +1123,74 @@ const styles = StyleSheet.create({
   },
   toggleButtonTextActive: {
     color: '#fff',
+  },
+
+  // Shopping list modal
+  modalContent: {
+    backgroundColor: '#fff',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    padding: 20,
+  },
+  shoppingButton: {
+    backgroundColor: '#FF9800',
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  shoppingButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  shoppingCategory: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#333',
+    marginTop: 16,
+    marginBottom: 8,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e0e0e0',
+  },
+  shoppingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+    gap: 10,
+  },
+  shoppingItemName: {
+    fontSize: 15,
+    color: '#333',
+    flex: 1,
+  },
+  shoppingItemChecked: {
+    textDecorationLine: 'line-through',
+    color: '#999',
+  },
+  shoppingItemAmount: {
+    fontSize: 13,
+    color: '#888',
+  },
+  copyButton: {
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    padding: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 12,
+  },
+  copyButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

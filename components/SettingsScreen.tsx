@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { FOOD_CATEGORIES } from '../constants/foodCategories';
 
 interface SettingsScreenProps {
   visible: boolean;
@@ -28,20 +29,6 @@ type SettingsData = {
   showCalories: boolean;
   strictMode: boolean;
   analytics: boolean;
-};
-
-const FOOD_CATEGORIES = {
-  mainIngredients: {
-    肉類: ['鶏むね肉', 'ささみ', '豚ヒレ肉', '牛もも肉', '鶏もも肉', '豚ロース', '鶏ひき肉', '豚ひき肉'],
-    魚介類: ['鮭', 'サバ', 'タラ', 'マグロ', 'エビ', 'イカ', 'カツオ', 'アジ', 'ブリ'],
-    大豆製品: ['豆腐', '厚揚げ', '納豆', '油揚げ', '豆乳', 'おから'],
-  },
-  sideIngredients: {
-    緑黄色野菜: ['ブロッコリー', 'ほうれん草', 'にんじん', 'パプリカ', 'トマト', 'かぼちゃ', '小松菜'],
-    淡色野菜: ['キャベツ', 'レタス', '大根', 'もやし', 'きゅうり', '玉ねぎ', 'なす'],
-    きのこ類: ['しめじ', 'えのき', 'エリンギ', 'まいたけ', 'しいたけ'],
-    海藻類: ['わかめ', 'ひじき', 'のり', 'もずく', '昆布'],
-  },
 };
 
 const defaultSettings: SettingsData = {
@@ -480,7 +467,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                         <View key={categoryName}>
                           <Text style={styles.foodCategoryLabel}>{categoryName}</Text>
                           <View style={styles.foodGrid}>
-                            {foods.map(food => {
+                            {(foods as readonly string[]).map((food: string) => {
                               const isSelected = showFoodModal === 'liked'
                                 ? likedFoods.includes(food)
                                 : dislikedFoods.includes(food);

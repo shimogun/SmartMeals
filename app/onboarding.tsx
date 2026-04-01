@@ -13,20 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { User } from '../types';
-
-const FOOD_CATEGORIES = {
-  mainIngredients: {
-    肉類: ['鶏むね肉', 'ささみ', '豚ヒレ肉', '牛もも肉', '鶏もも肉', '豚ロース', '鶏ひき肉', '豚ひき肉'],
-    魚介類: ['鮭', 'サバ', 'タラ', 'マグロ', 'エビ', 'イカ', 'カツオ', 'アジ', 'ブリ'],
-    大豆製品: ['豆腐', '厚揚げ', '納豆', '油揚げ', '豆乳', 'おから'],
-  },
-  sideIngredients: {
-    緑黄色野菜: ['ブロッコリー', 'ほうれん草', 'にんじん', 'パプリカ', 'トマト', 'かぼちゃ', '小松菜'],
-    淡色野菜: ['キャベツ', 'レタス', '大根', 'もやし', 'きゅうり', '玉ねぎ', 'なす'],
-    きのこ類: ['しめじ', 'えのき', 'エリンギ', 'まいたけ', 'しいたけ'],
-    海藻類: ['わかめ', 'ひじき', 'のり', 'もずく', '昆布'],
-  },
-};
+import { FOOD_CATEGORIES } from '../constants/foodCategories';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -174,7 +161,7 @@ export default function OnboardingScreen() {
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.nextButton} onPress={handleNext}>
+      <TouchableOpacity style={[styles.nextButton, { flex: 0 }]} onPress={handleNext}>
         <Text style={styles.nextButtonText}>次へ</Text>
       </TouchableOpacity>
     </View>

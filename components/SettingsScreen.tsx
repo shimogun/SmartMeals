@@ -152,6 +152,16 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
       Alert.alert('入力エラー', '名前を入力してください');
       return;
     }
+    const heightVal = editHeight ? parseFloat(editHeight) : undefined;
+    const weightVal = editWeight ? parseFloat(editWeight) : undefined;
+    if (heightVal !== undefined && (heightVal < 100 || heightVal > 250)) {
+      Alert.alert('入力エラー', '身長は100〜250cmの範囲で入力してください');
+      return;
+    }
+    if (weightVal !== undefined && (weightVal < 20 || weightVal > 300)) {
+      Alert.alert('入力エラー', '体重は20〜300kgの範囲で入力してください');
+      return;
+    }
     try {
       const stored = await AsyncStorage.getItem('users');
       if (!stored) return;
@@ -314,6 +324,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                     <View style={styles.profileInfo}>
                       <Text style={styles.profileName}>{user.name}</Text>
                       <Text style={styles.profileSub}>{user.age}歳</Text>
+                      {user.healthData && (
+                        <Text style={styles.profileSub}>
+                          {user.healthData.height ? `${user.healthData.height}cm` : ''}
+                          {user.healthData.height && user.healthData.weight ? ' / ' : ''}
+                          {user.healthData.weight ? `${user.healthData.weight}kg` : ''}
+                          {user.healthData.gender ? ` / ${user.healthData.gender === 'male' ? '男性' : '女性'}` : ''}
+                        </Text>
+                      )}
                     </View>
                     <TouchableOpacity onPress={startEditProfile} style={styles.profileEditButton}>
                       <Ionicons name="pencil" size={18} color="#007AFF" />
@@ -334,6 +352,47 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                   <View style={styles.editRow}>
                     <Text style={styles.editLabel}>年齢</Text>
                     <TextInput style={styles.editInput} value={editAge} onChangeText={setEditAge} placeholder="30" keyboardType="numeric" placeholderTextColor="#999" />
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>身長</Text>
+                    <TextInput style={styles.editInput} value={editHeight} onChangeText={setEditHeight} placeholder="170" keyboardType="decimal-pad" placeholderTextColor="#999" />
+                    <Text style={styles.editUnit}>cm</Text>
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>体重</Text>
+                    <TextInput style={styles.editInput} value={editWeight} onChangeText={setEditWeight} placeholder="65" keyboardType="decimal-pad" placeholderTextColor="#999" />
+                    <Text style={styles.editUnit}>kg</Text>
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>性別</Text>
+                    <View style={styles.toggleRow}>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, editGender === 'male' && styles.toggleButtonActive]}
+                        onPress={() => setEditGender('male')}
+                      >
+                        <Text style={[styles.toggleText, editGender === 'male' && styles.toggleTextActive]}>男性</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.toggleButton, editGender === 'female' && styles.toggleButtonActive]}
+                        onPress={() => setEditGender('female')}
+                      >
+                        <Text style={[styles.toggleText, editGender === 'female' && styles.toggleTextActive]}>女性</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.editRow}>
+                    <Text style={styles.editLabel}>活動量</Text>
+                    <View style={styles.toggleRow}>
+                      {([['light', '軽い'], ['moderate', '普通'], ['high', '多い']] as const).map(([value, label]) => (
+                        <TouchableOpacity
+                          key={value}
+                          style={[styles.toggleButton, editActivity === value && styles.toggleButtonActive]}
+                          onPress={() => setEditActivity(value)}
+                        >
+                          <Text style={[styles.toggleText, editActivity === value && styles.toggleTextActive]}>{label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
                   </View>
                   <View style={styles.editActions}>
                     <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingProfile(false)}>

@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
 import * as MailComposer from 'expo-mail-composer';
+import dataExportService from '../services/dataExportService';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
 
 interface SettingsScreenProps {
@@ -250,12 +251,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     }
   };
 
-  const handleDataExport = () => {
-    Alert.alert(
-      'データエクスポート',
-      'データのエクスポート機能は今後のアップデートで対応予定です。',
-      [{ text: 'OK' }]
-    );
+  const handleDataExport = async () => {
+    if (!user) return;
+    try {
+      await dataExportService.exportAll(user.id);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'エクスポートに失敗しました';
+      Alert.alert('エクスポート', message);
+    }
   };
 
   const handleDataClear = () => {

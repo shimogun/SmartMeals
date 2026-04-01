@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as WebBrowser from 'expo-web-browser';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
 
 interface SettingsScreenProps {
@@ -292,6 +293,17 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
       '糖尿病患者のための血糖値管理・食事提案アプリ\n\nバージョン: 1.0.0\n開発: SmartMeals Team\n\n© 2024 SmartMeals. All rights reserved.',
       [{ text: 'OK' }]
     );
+  };
+
+  const PRIVACY_POLICY_URL = 'https://smartmeals.app/privacy';
+  const TERMS_URL = 'https://smartmeals.app/terms';
+
+  const handleOpenUrl = async (url: string, title: string) => {
+    try {
+      await WebBrowser.openBrowserAsync(url);
+    } catch {
+      Alert.alert(title, '現在準備中です。');
+    }
   };
 
   return (
@@ -683,13 +695,13 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
               />
             </View>
 
-            <TouchableOpacity style={styles.actionItem}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => handleOpenUrl(PRIVACY_POLICY_URL, 'プライバシーポリシー')}>
               <Ionicons name="document-text-outline" size={20} color="#007AFF" />
               <Text style={styles.actionLabel}>プライバシーポリシー</Text>
               <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => handleOpenUrl(TERMS_URL, '利用規約')}>
               <Ionicons name="document-outline" size={20} color="#007AFF" />
               <Text style={styles.actionLabel}>利用規約</Text>
               <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />

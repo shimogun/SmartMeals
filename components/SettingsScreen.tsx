@@ -18,6 +18,8 @@ import * as WebBrowser from 'expo-web-browser';
 import * as MailComposer from 'expo-mail-composer';
 import dataExportService from '../services/dataExportService';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
+import notificationService from '../services/notificationService';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 interface SettingsScreenProps {
   visible: boolean;
@@ -32,6 +34,7 @@ type SettingsData = {
   showCalories: boolean;
   strictMode: boolean;
   analytics: boolean;
+  reminderTime: string;
 };
 
 const defaultSettings: SettingsData = {
@@ -42,6 +45,7 @@ const defaultSettings: SettingsData = {
   showCalories: true,
   strictMode: false,
   analytics: true,
+  reminderTime: '20:00',
 };
 
 type UserData = {
@@ -75,6 +79,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [glucoseMax, setGlucoseMax] = useState('');
   const [dailyCarbLimit, setDailyCarbLimit] = useState('');
   const [dailyCalorieLimit, setDailyCalorieLimit] = useState('');
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -87,7 +92,12 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     try {
       const stored = await AsyncStorage.getItem('app_settings');
       if (stored) {
-        setSettings({ ...defaultSettings, ...JSON.parse(stored) });
+        const loaded = { ...defaultSettings, ...JSON.parse(stored) };
+        setSettings(loaded);
+        if (loaded.notifications) {
+          const { hour, minute } = notificationService.parseTime(loaded.reminderTime || '20:00');
+          notificationService.scheduleReminder(hour, minute);
+        }
       }
     } catch (error) {
       console.error('設定読み込みエラー:', error);
@@ -107,6 +117,36 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const toggleSetting = (key: keyof SettingsData) => {
     const newSettings = { ...settings, [key]: !settings[key] };
     saveSettings(newSettings);
+  };
+
+  const handleToggleNotifications = async () => {
+    const newValue = !settings.notifications;
+    if (newValue) {
+      const granted = await notificationService.requestPermission();
+      if (!granted) {
+        Alert.alert('通知の許可', '設定アプリから通知を許可してください');
+        return;
+      }
+      const { hour, minute } = notificationService.parseTime(settings.reminderTime);
+      await notificationService.scheduleReminder(hour, minute);
+    } else {
+      await notificationService.cancelReminder();
+    }
+    const newSettings = { ...settings, notifications: newValue };
+    saveSettings(newSettings);
+  };
+
+  const handleTimeChange = async (event: DateTimePickerEvent, date?: Date) => {
+    setShowTimePicker(false);
+    if (event.type === 'dismissed' || !date) return;
+    const hour = date.getHours();
+    const minute = date.getMinutes();
+    const timeStr = notificationService.formatTime(hour, minute);
+    const newSettings = { ...settings, reminderTime: timeStr };
+    saveSettings(newSettings);
+    if (settings.notifications) {
+      await notificationService.scheduleReminder(hour, minute);
+    }
   };
 
   const loadUser = async () => {
@@ -607,19 +647,48 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           {/* 通知設定 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>🔔 通知</Text>
-            
+
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>プッシュ通知</Text>
-                <Text style={styles.settingDescription}>記録リマインダー・週間レポート</Text>
+                <Text style={styles.settingLabel}>記録リマインダー</Text>
+                <Text style={styles.settingDescription}>毎日指定時刻に記録を促す通知</Text>
               </View>
               <Switch
                 value={settings.notifications}
-                onValueChange={() => toggleSetting('notifications')}
+                onValueChange={handleToggleNotifications}
                 trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
                 thumbColor="#fff"
               />
             </View>
+
+            {settings.notifications && (
+              <TouchableOpacity
+                style={styles.settingItem}
+                onPress={() => setShowTimePicker(true)}
+              >
+                <View style={styles.settingLeft}>
+                  <Text style={styles.settingLabel}>リマインダー時刻</Text>
+                </View>
+                <Text style={{ fontSize: 16, color: '#007AFF', fontWeight: '600' }}>
+                  {settings.reminderTime}
+                </Text>
+              </TouchableOpacity>
+            )}
+
+            {showTimePicker && (
+              <DateTimePicker
+                value={(() => {
+                  const { hour, minute } = notificationService.parseTime(settings.reminderTime);
+                  const d = new Date();
+                  d.setHours(hour, minute, 0, 0);
+                  return d;
+                })()}
+                mode="time"
+                is24Hour={true}
+                display="spinner"
+                onChange={handleTimeChange}
+              />
+            )}
           </View>
 
           {/* 表示設定 */}

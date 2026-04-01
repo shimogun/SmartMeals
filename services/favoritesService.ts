@@ -10,6 +10,9 @@ export interface FavoriteMeal {
   protein: number;
   fat: number;
   mealType?: string;
+  description?: string;
+  ingredients?: string[];
+  recipe?: string[];
 }
 
 class FavoritesService {

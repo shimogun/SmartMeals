@@ -254,6 +254,9 @@ export default function MealPlanScreen() {
       protein: meal.protein,
       fat: meal.fat,
       mealType: meal.mealType,
+      description: meal.description,
+      ingredients: meal.ingredients,
+      recipe: meal.recipe,
     };
     const added = await favoritesService.toggleFavorite(currentUser.id, favMeal);
     const ids = await favoritesService.getFavoriteIds(currentUser.id);
@@ -261,6 +264,36 @@ export default function MealPlanScreen() {
     // Refresh favorites list
     const favList = await favoritesService.getFavorites(currentUser.id);
     setFavorites(favList);
+  };
+
+  const handleOpenFavoriteRecipe = (fav: FavoriteMeal) => {
+    const meal: GeneratedMeal = {
+      id: fav.id,
+      name: fav.name,
+      calories: fav.calories,
+      carbs: fav.carbs,
+      protein: fav.protein,
+      fat: fav.fat,
+      mealType: fav.mealType || '',
+      description: fav.description || '',
+      ingredients: fav.ingredients || [],
+      recipe: fav.recipe || [],
+      servings: 1,
+    };
+    setSelectedMeal(meal);
+    setShowRecipeModal(true);
+  };
+
+  const handleRemoveFavorite = async (favId: string) => {
+    if (!currentUser) return;
+    const fav = favorites.find(f => f.id === favId);
+    if (fav) {
+      await favoritesService.toggleFavorite(currentUser.id, fav);
+      const favList = await favoritesService.getFavorites(currentUser.id);
+      setFavorites(favList);
+      const ids = await favoritesService.getFavoriteIds(currentUser.id);
+      setPlanFavoriteIds(ids);
+    }
   };
 
   const handleOpenRecipe = (meal: GeneratedMeal) => {
@@ -414,16 +447,28 @@ export default function MealPlanScreen() {
         {/* Favorites Section */}
         {favorites.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>お気に入り</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.favScroll}>
-              {favorites.map((fav) => (
-                <View key={fav.id} style={styles.favCard}>
-                  <Ionicons name="star" size={14} color="#f5a623" style={{ marginBottom: 4 }} />
-                  <Text style={styles.favCardName} numberOfLines={2}>{fav.name}</Text>
-                  <Text style={styles.favCardCalories}>{fav.calories} kcal</Text>
+            <Text style={styles.sectionTitle}>お気に入りの献立</Text>
+            {favorites.map((fav) => (
+              <TouchableOpacity
+                key={fav.id}
+                style={styles.favListCard}
+                onPress={() => handleOpenFavoriteRecipe(fav)}
+                activeOpacity={0.7}
+              >
+                <Ionicons name="star" size={16} color="#f5a623" style={{ marginRight: 10 }} />
+                <View style={styles.favListCardInfo}>
+                  <Text style={styles.favListCardName} numberOfLines={1}>{fav.name}</Text>
+                  <Text style={styles.favListCardCal}>{fav.calories} kcal</Text>
                 </View>
-              ))}
-            </ScrollView>
+                <TouchableOpacity
+                  onPress={(e) => { e.stopPropagation(); handleRemoveFavorite(fav.id); }}
+                  style={styles.deleteBtn}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#e74c3c" />
+                </TouchableOpacity>
+                <Ionicons name="chevron-forward" size={16} color="#ccc" />
+              </TouchableOpacity>
+            ))}
           </View>
         )}
 
@@ -486,7 +531,7 @@ export default function MealPlanScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
               {/* Period */}
               <Text style={styles.fieldLabel}>期間</Text>
               {renderSelectorButtons<3 | 5 | 7>(
@@ -566,7 +611,7 @@ export default function MealPlanScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
               {selectedPlan &&
                 Object.keys(selectedPlan.meals)
                   .sort()
@@ -636,7 +681,7 @@ export default function MealPlanScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={styles.modalBody}>
+            <ScrollView style={styles.modalBody} contentContainerStyle={styles.modalBodyContent}>
               {selectedMeal && (
                 <>
                   {/* Description */}
@@ -874,30 +919,31 @@ const styles = StyleSheet.create({
   },
 
   // Favorites
-  favScroll: {
-    marginHorizontal: -4,
-  },
-  favCard: {
-    width: 120,
+  favListCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 10,
-    padding: 12,
-    marginHorizontal: 4,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 3,
     elevation: 2,
   },
-  favCardName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 4,
+  favListCardInfo: {
+    flex: 1,
   },
-  favCardCalories: {
+  favListCardName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#222',
+  },
+  favListCardCal: {
     fontSize: 12,
     color: '#888',
+    marginTop: 2,
   },
 
   // Plan card
@@ -975,6 +1021,9 @@ const styles = StyleSheet.create({
   modalBody: {
     paddingHorizontal: 20,
     paddingTop: 16,
+  },
+  modalBodyContent: {
+    paddingBottom: 32,
   },
   modalFooter: {
     paddingHorizontal: 20,

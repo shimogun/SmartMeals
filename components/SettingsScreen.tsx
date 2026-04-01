@@ -80,6 +80,11 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [dailyCarbLimit, setDailyCarbLimit] = useState('');
   const [dailyCalorieLimit, setDailyCalorieLimit] = useState('');
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [pickerDate, setPickerDate] = useState<Date>(() => {
+    const d = new Date();
+    d.setHours(20, 0, 0, 0);
+    return d;
+  });
 
   useEffect(() => {
     if (visible) {
@@ -105,9 +110,9 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   };
 
   const saveSettings = async (newSettings: SettingsData) => {
+    setSettings(newSettings);
     try {
       await AsyncStorage.setItem('app_settings', JSON.stringify(newSettings));
-      setSettings(newSettings);
     } catch (error) {
       console.error('設定保存エラー:', error);
       Alert.alert('エラー', '設定の保存に失敗しました');
@@ -136,6 +141,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     saveSettings(newSettings);
   };
 
+  const openTimePicker = () => {
+    const { hour, minute } = notificationService.parseTime(settings.reminderTime);
+    const d = new Date();
+    d.setHours(hour, minute, 0, 0);
+    setPickerDate(d);
+    setShowTimePicker(true);
+  };
+
   const handleTimeChange = async (event: DateTimePickerEvent, date?: Date) => {
     setShowTimePicker(false);
     if (event.type === 'dismissed' || !date) return;
@@ -144,7 +157,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     const timeStr = notificationService.formatTime(hour, minute);
     const newSettings = { ...settings, reminderTime: timeStr };
     saveSettings(newSettings);
-    if (settings.notifications) {
+    if (newSettings.notifications) {
       await notificationService.scheduleReminder(hour, minute);
     }
   };
@@ -664,7 +677,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             {settings.notifications && (
               <TouchableOpacity
                 style={styles.settingItem}
-                onPress={() => setShowTimePicker(true)}
+                onPress={openTimePicker}
               >
                 <View style={styles.settingLeft}>
                   <Text style={styles.settingLabel}>リマインダー時刻</Text>
@@ -677,12 +690,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
             {showTimePicker && (
               <DateTimePicker
-                value={(() => {
-                  const { hour, minute } = notificationService.parseTime(settings.reminderTime);
-                  const d = new Date();
-                  d.setHours(hour, minute, 0, 0);
-                  return d;
-                })()}
+                value={pickerDate}
                 mode="time"
                 is24Hour={true}
                 display="spinner"

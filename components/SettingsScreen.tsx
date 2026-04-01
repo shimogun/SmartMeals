@@ -268,15 +268,35 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
       [
         { text: 'キャンセル', style: 'cancel' },
         {
-          text: '削除',
+          text: '削除する',
           style: 'destructive',
-          onPress: async () => {
-            try {
-              await AsyncStorage.multiRemove(['glucose_records', 'weekly_records', 'users']);
-              Alert.alert('完了', 'データを削除しました。アプリを再起動してください。');
-            } catch (error) {
-              Alert.alert('エラー', 'データの削除に失敗しました');
-            }
+          onPress: () => {
+            Alert.alert(
+              '最終確認',
+              'この操作は元に戻せません。本当にすべてのデータを完全に削除しますか？',
+              [
+                { text: 'やめる', style: 'cancel' },
+                {
+                  text: '完全に削除する',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await AsyncStorage.multiRemove([
+                        'glucose_records',
+                        'weekly_records',
+                        'saved_meal_plans',
+                        'users',
+                        'currentUserIndex',
+                        'app_settings',
+                      ]);
+                      Alert.alert('完了', 'すべてのデータを削除しました。アプリを再起動してください。');
+                    } catch {
+                      Alert.alert('エラー', 'データの削除に失敗しました');
+                    }
+                  },
+                },
+              ]
+            );
           },
         },
       ]

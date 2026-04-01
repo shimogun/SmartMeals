@@ -698,13 +698,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Text style={styles.settingLabel}>ダークモード</Text>
-                <Text style={styles.settingDescription}>暗いテーマで表示</Text>
+                <Text style={styles.settingDescription}>今後のアップデートで対応予定</Text>
               </View>
               <Switch
                 value={settings.darkMode}
                 onValueChange={() => toggleSetting('darkMode')}
                 trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
                 thumbColor="#fff"
+                disabled={true}
               />
             </View>
 
@@ -760,13 +761,14 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Text style={styles.settingLabel}>自動バックアップ</Text>
-                <Text style={styles.settingDescription}>データを自動でクラウドに保存</Text>
+                <Text style={styles.settingDescription}>今後のアップデートで対応予定</Text>
               </View>
               <Switch
                 value={settings.dataBackup}
                 onValueChange={() => toggleSetting('dataBackup')}
                 trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
                 thumbColor="#fff"
+                disabled={true}
               />
             </View>
 
@@ -838,8 +840,8 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           {/* バージョン情報 */}
           <View style={styles.versionSection}>
-            <Text style={styles.versionText}>SmartMeals v1.0.0</Text>
-            <Text style={styles.copyrightText}>© 2024 SmartMeals Team</Text>
+            <Text style={styles.versionText}>SmartMeals v1.1.0</Text>
+            <Text style={styles.copyrightText}>© 2026 SmartMeals</Text>
           </View>
 
           <View style={{ height: 50 }} />

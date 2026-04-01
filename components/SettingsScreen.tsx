@@ -15,6 +15,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as WebBrowser from 'expo-web-browser';
+import * as MailComposer from 'expo-mail-composer';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
 
 interface SettingsScreenProps {
@@ -279,12 +280,24 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     );
   };
 
-  const handleFeedback = () => {
-    Alert.alert(
-      'フィードバック',
-      'ご意見・ご要望をお聞かせください。\n\n今後のアップデートでフィードバック送信機能を追加予定です。',
-      [{ text: 'OK' }]
-    );
+  const handleFeedback = async () => {
+    const isAvailable = await MailComposer.isAvailableAsync();
+    if (!isAvailable) {
+      Alert.alert(
+        'メール未設定',
+        'メールアプリが設定されていません。smartmeals.feedback@gmail.com までご連絡ください。'
+      );
+      return;
+    }
+    try {
+      await MailComposer.composeAsync({
+        recipients: ['smartmeals.feedback@gmail.com'],
+        subject: 'SmartMeals フィードバック',
+        body: `\n\n---\nアプリバージョン: 1.0.0\nユーザー名: ${user?.name || '未設定'}`,
+      });
+    } catch {
+      Alert.alert('エラー', 'メールの起動に失敗しました');
+    }
   };
 
   const handleAbout = () => {

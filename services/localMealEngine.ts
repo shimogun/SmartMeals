@@ -1,8 +1,11 @@
 // SmartMeals ローカル献立生成エンジン - API不要のルールベース生成
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { UserHealthProfile, GeneratedMeal } from '../types';
+import { breakfastTemplates } from '../data/breakfastTemplates';
+import { lunchTemplates } from '../data/lunchTemplates';
+import { dinnerTemplates } from '../data/dinnerTemplates';
 
-interface MealTemplate {
+export interface MealTemplate {
   id: string;
   name: string;
   baseCalories: number;
@@ -329,6 +332,10 @@ class LocalMealEngine {
         difficulty: 'medium',
         gi: 45
       },
+      // 追加テンプレートを統合
+      ...breakfastTemplates,
+      ...lunchTemplates,
+      ...dinnerTemplates,
     ];
   }
 

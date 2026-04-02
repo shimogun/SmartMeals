@@ -187,54 +187,12 @@ export default function DailyNutritionSummary({ date, meals: propMeals, autoLimi
           barStyles={barStyles}
         />
         <NutrientBar
-          label="炭水化物"
+          label="糖質"
           value={totals.carbs}
           target={targets.carbs}
           unit="g"
           barStyles={barStyles}
         />
-        <NutrientBar
-          label="たんぱく質"
-          value={totals.protein}
-          target={targets.protein}
-          unit="g"
-          barStyles={barStyles}
-        />
-        <NutrientBar
-          label="脂質"
-          value={totals.fat}
-          target={targets.fat}
-          unit="g"
-          barStyles={barStyles}
-        />
-      </View>
-
-      {/* 食事別内訳 */}
-      <View style={styles.breakdownContainer}>
-        <Text style={styles.breakdownTitle}>食事別内訳</Text>
-        {categoryOrder.map((category) => {
-          const categoryMeals = mealsByCategory[category];
-          if (!categoryMeals || categoryMeals.length === 0) return null;
-
-          const categoryTotals = categoryMeals.reduce(
-            (acc, meal) => ({
-              calories: acc.calories + (meal.calories || 0),
-              carbs: acc.carbs + (meal.carbs || 0),
-              protein: acc.protein + (meal.protein || 0),
-              fat: acc.fat + (meal.fat || 0),
-            }),
-            { calories: 0, carbs: 0, protein: 0, fat: 0 }
-          );
-
-          return (
-            <View key={category} style={styles.breakdownRow}>
-              <Text style={styles.breakdownCategory}>{category}</Text>
-              <Text style={styles.breakdownValues}>
-                {Math.round(categoryTotals.calories)}kcal / 炭{Math.round(categoryTotals.carbs)}g / た{Math.round(categoryTotals.protein)}g / 脂{Math.round(categoryTotals.fat)}g
-              </Text>
-            </View>
-          );
-        })}
       </View>
     </View>
   );

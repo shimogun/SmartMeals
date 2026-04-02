@@ -37,6 +37,10 @@ export default function DashboardScreen() {
   const [hba1cValue, setHba1cValue] = useState('');
   const [latestHba1cDisplay, setLatestHba1cDisplay] = useState<{ value: number; date: string } | null>(null);
 
+  // Weight input
+  const [weightValue, setWeightValue] = useState('');
+  const [latestWeightDisplay, setLatestWeightDisplay] = useState<number | null>(null);
+
   // Today's meals
   const [todayMeals, setTodayMeals] = useState<GeneratedMeal[]>([]);
   const [selectedMealDetail, setSelectedMealDetail] = useState<GeneratedMeal | null>(null);
@@ -100,6 +104,7 @@ export default function DashboardScreen() {
         }
         setCurrentUser(user);
         setMedicalGuidance(user.medicalGuidance);
+        if (user.healthData?.weight) setLatestWeightDisplay(user.healthData.weight);
 
         const favIds = await favoritesService.getFavoriteIds(user.id);
         setFavoriteIds(favIds);
@@ -180,9 +185,10 @@ export default function DashboardScreen() {
 
     const hasGlucose = glucoseValue.trim() !== '';
     const hasHba1c = hba1cValue.trim() !== '';
+    const hasWeight = weightValue.trim() !== '';
 
-    if (!hasGlucose && !hasHba1c) {
-      Alert.alert('入力エラー', '血糖値またはHbA1cを入力してください');
+    if (!hasGlucose && !hasHba1c && !hasWeight) {
+      Alert.alert('入力エラー', 'いずれかの数値を入力してください');
       return;
     }
 
@@ -198,6 +204,13 @@ export default function DashboardScreen() {
       const hv = parseFloat(hba1cValue);
       if (isNaN(hv) || hv < 3 || hv > 20) {
         Alert.alert('入力エラー', 'HbA1cは3.0〜20.0の範囲で入力してください');
+        return;
+      }
+    }
+    if (hasWeight) {
+      const wv = parseFloat(weightValue);
+      if (isNaN(wv) || wv < 20 || wv > 300) {
+        Alert.alert('入力エラー', '体重は20〜300kgの範囲で入力してください');
         return;
       }
     }
@@ -242,6 +255,25 @@ export default function DashboardScreen() {
         setHba1cValue('');
         setLatestHba1cDisplay({ value: hv, date: today });
         messages.push(`HbA1c ${hv}%`);
+      }
+
+      // 体重を保存（ユーザープロフィールを更新）
+      if (hasWeight) {
+        const wv = parseFloat(weightValue);
+        const usersData = await AsyncStorage.getItem('users');
+        if (usersData) {
+          const users = JSON.parse(usersData);
+          const indexData = await AsyncStorage.getItem('currentUserIndex');
+          const idx = indexData ? parseInt(indexData) : 0;
+          if (users[idx]) {
+            users[idx].healthData = { ...users[idx].healthData, weight: wv };
+            await AsyncStorage.setItem('users', JSON.stringify(users));
+            setCurrentUser(users[idx]);
+            setLatestWeightDisplay(wv);
+          }
+        }
+        setWeightValue('');
+        messages.push(`体重 ${wv}kg`);
       }
 
       Alert.alert('保存完了', `${messages.join(' / ')} を記録しました`);
@@ -300,8 +332,16 @@ export default function DashboardScreen() {
         weight: currentUser.healthData.weight,
         likedFoods: currentUser.foodPreferences.liked,
         dislikedFoods: currentUser.foodPreferences.disliked,
-        dailyCarbLimit: currentUser.medicalGuidance?.dailyCarbLimit,
-        dailyCalorieLimit: currentUser.medicalGuidance?.dailyCalorieLimit,
+        ...calcAutoLimits(
+          {
+            height: currentUser.healthData.height,
+            weight: currentUser.healthData.weight,
+            age: currentUser.age || 50,
+            gender: currentUser.healthData.gender || 'male',
+            activityLevel: currentUser.healthData.activityLevel || 'moderate',
+          },
+          currentUser.medicalGuidance?.targetHba1c ?? latestHba1c,
+        ),
       };
 
       const tomorrow = new Date();
@@ -560,6 +600,27 @@ export default function DashboardScreen() {
           )}
         </View>
 
+        {/* 体重（月1回程度） */}
+        <View style={styles.hba1cSection}>
+          <Text style={styles.inputLabel}>体重</Text>
+          <View style={styles.hba1cInputRow}>
+            <TextInput
+              style={styles.hba1cInput}
+              value={weightValue}
+              onChangeText={setWeightValue}
+              placeholder={latestWeightDisplay ? String(latestWeightDisplay) : '例: 65'}
+              placeholderTextColor={colors.placeholder}
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.unit}>kg</Text>
+          </View>
+          {latestWeightDisplay && (
+            <Text style={styles.latestValue}>
+              現在: {latestWeightDisplay}kg
+            </Text>
+          )}
+        </View>
+
         {/* 共通保存ボタン */}
         <TouchableOpacity style={styles.recordSaveButton} onPress={saveHealthRecord}>
           <Text style={styles.recordSaveButtonText}>保存</Text>
@@ -622,21 +683,6 @@ export default function DashboardScreen() {
         ) : undefined} />
       </View>
 
-      {/* Update tomorrow's meals */}
-      <View style={styles.card}>
-        <Text style={styles.cardTitle}>明日の献立を更新</Text>
-        <Text style={styles.updateMessage}>{updateMessage}</Text>
-        <TouchableOpacity
-          style={[styles.updateButton, isUpdating && styles.updateButtonDisabled]}
-          onPress={handleUpdateMeals}
-          disabled={isUpdating}
-        >
-          <Ionicons name="refresh" size={20} color="#fff" />
-          <Text style={styles.updateButtonText}>
-            {isUpdating ? '更新中...' : '更新する'}
-          </Text>
-        </TouchableOpacity>
-      </View>
 
       {/* Recipe detail modal */}
       <Modal visible={showMealModal} animationType="slide" transparent>

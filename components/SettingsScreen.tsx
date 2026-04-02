@@ -11,6 +11,7 @@ import {
   Alert,
   Dimensions,
   SafeAreaView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -18,8 +19,15 @@ import * as WebBrowser from 'expo-web-browser';
 import * as MailComposer from 'expo-mail-composer';
 import dataExportService from '../services/dataExportService';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
-import notificationService from '../services/notificationService';
+import notificationService, {
+  ReminderSettings,
+  defaultReminderSettings,
+  DayOfWeek,
+  SlotConfig,
+  MAX_SLOTS,
+} from '../services/notificationService';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import * as ImagePicker from 'expo-image-picker';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useThemeColors } from '../hooks/useThemeColors';
 
@@ -55,6 +63,7 @@ type UserData = {
   name: string;
   age: number;
   avatar: string;
+  avatarUri?: string;
   healthData?: {
     height?: number;
     weight?: number;
@@ -70,11 +79,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [user, setUser] = useState<UserData | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editAge, setEditAge] = useState('');
-  const [editHeight, setEditHeight] = useState('');
-  const [editWeight, setEditWeight] = useState('');
-  const [editGender, setEditGender] = useState<'male' | 'female'>('male');
-  const [editActivity, setEditActivity] = useState<'light' | 'moderate' | 'high'>('moderate');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [likedFoods, setLikedFoods] = useState<string[]>([]);
   const [dislikedFoods, setDislikedFoods] = useState<string[]>([]);
   const [showFoodModal, setShowFoodModal] = useState<'liked' | 'disliked' | null>(null);
@@ -82,7 +87,12 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [glucoseMin, setGlucoseMin] = useState('');
   const [glucoseMax, setGlucoseMax] = useState('');
   // dailyCarbLimit, dailyCalorieLimit は自動算出に移行（state不要）
+  const [reminderSettings, setReminderSettings] = useState<ReminderSettings>(defaultReminderSettings);
+  const [showFaqModal, setShowFaqModal] = useState(false);
+  const [showAboutModal, setShowAboutModal] = useState(false);
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
+  const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
   const [pickerDate, setPickerDate] = useState<Date>(() => {
     const d = new Date();
     d.setHours(20, 0, 0, 0);
@@ -102,10 +112,20 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
       if (stored) {
         const loaded = { ...defaultSettings, ...JSON.parse(stored) };
         setSettings(loaded);
-        if (loaded.notifications) {
-          const { hour, minute } = notificationService.parseTime(loaded.reminderTime || '20:00');
-          notificationService.scheduleReminder(hour, minute);
-        }
+      }
+      const reminderStored = await AsyncStorage.getItem('reminder_settings');
+      if (reminderStored) {
+        try {
+          const parsed = JSON.parse(reminderStored);
+          // slotsが配列であることを確認（旧形式のオブジェクトだった場合はデフォルトを使う）
+          if (parsed && Array.isArray(parsed.slots) && parsed.slots.length >= 1 && parsed.slots.length <= MAX_SLOTS) {
+            setReminderSettings({
+              enabled: parsed.enabled ?? defaultReminderSettings.enabled,
+              slots: parsed.slots,
+              days: parsed.days ?? defaultReminderSettings.days,
+            });
+          }
+        } catch {}
       }
     } catch (error) {
       console.error('設定読み込みエラー:', error);
@@ -127,42 +147,64 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     saveSettings(newSettings);
   };
 
-  const handleToggleNotifications = async () => {
-    const newValue = !settings.notifications;
-    if (newValue) {
+  const saveReminderSettings = async (newRS: ReminderSettings) => {
+    setReminderSettings(newRS);
+    try {
+      await AsyncStorage.setItem('reminder_settings', JSON.stringify(newRS));
+      await notificationService.scheduleReminders(newRS);
+    } catch {
+      Alert.alert('エラー', '通知設定の保存に失敗しました');
+    }
+  };
+
+  const handleToggleReminder = async () => {
+    const newEnabled = !reminderSettings.enabled;
+    if (newEnabled) {
       const granted = await notificationService.requestPermission();
       if (!granted) {
         Alert.alert('通知の許可', '設定アプリから通知を許可してください');
         return;
       }
-      const { hour, minute } = notificationService.parseTime(settings.reminderTime);
-      await notificationService.scheduleReminder(hour, minute);
-    } else {
-      await notificationService.cancelReminder();
     }
-    const newSettings = { ...settings, notifications: newValue };
-    saveSettings(newSettings);
+    saveReminderSettings({ ...reminderSettings, enabled: newEnabled });
   };
 
-  const openTimePicker = () => {
-    const { hour, minute } = notificationService.parseTime(settings.reminderTime);
+  const addSlot = () => {
+    if (reminderSettings.slots.length >= MAX_SLOTS) return;
+    const newSlot: SlotConfig = { enabled: true, hour: 12, minute: 0 };
+    saveReminderSettings({ ...reminderSettings, slots: [...reminderSettings.slots, newSlot] });
+  };
+
+  const removeSlot = (index: number) => {
+    if (reminderSettings.slots.length <= 1) return;
+    const newSlots = reminderSettings.slots.filter((_, i) => i !== index);
+    saveReminderSettings({ ...reminderSettings, slots: newSlots });
+  };
+
+  const toggleDay = (day: DayOfWeek) => {
+    const newDays = { ...reminderSettings.days };
+    newDays[day] = !newDays[day];
+    saveReminderSettings({ ...reminderSettings, days: newDays });
+  };
+
+  const openSlotTimePicker = (index: number) => {
+    const config = reminderSettings.slots[index];
     const d = new Date();
-    d.setHours(hour, minute, 0, 0);
+    d.setHours(config.hour, config.minute, 0, 0);
     setPickerDate(d);
+    setEditingSlotIndex(index);
     setShowTimePicker(true);
   };
 
   const handleTimeChange = async (event: DateTimePickerEvent, date?: Date) => {
     setShowTimePicker(false);
-    if (event.type === 'dismissed' || !date) return;
+    if (event.type === 'dismissed' || !date || editingSlotIndex === null) return;
     const hour = date.getHours();
     const minute = date.getMinutes();
-    const timeStr = notificationService.formatTime(hour, minute);
-    const newSettings = { ...settings, reminderTime: timeStr };
-    saveSettings(newSettings);
-    if (newSettings.notifications) {
-      await notificationService.scheduleReminder(hour, minute);
-    }
+    const newSlots = [...reminderSettings.slots];
+    newSlots[editingSlotIndex] = { ...newSlots[editingSlotIndex], hour, minute };
+    saveReminderSettings({ ...reminderSettings, slots: newSlots });
+    setEditingSlotIndex(null);
   };
 
   const loadUser = async () => {
@@ -175,6 +217,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
         const currentUser = users[index] || users[0];
         if (currentUser) {
           setUser(currentUser);
+          if (currentUser.avatarUri) setAvatarUri(currentUser.avatarUri);
           if (currentUser.foodPreferences) {
             setLikedFoods(currentUser.foodPreferences.liked || []);
             setDislikedFoods(currentUser.foodPreferences.disliked || []);
@@ -196,28 +239,35 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const startEditProfile = () => {
     if (!user) return;
     setEditName(user.name);
-    setEditAge(user.age?.toString() || '');
-    setEditHeight(user.healthData?.height?.toString() || '');
-    setEditWeight(user.healthData?.weight?.toString() || '');
-    setEditGender(user.healthData?.gender || 'male');
-    setEditActivity(user.healthData?.activityLevel || 'moderate');
     setEditingProfile(true);
+  };
+
+  const pickAvatar = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.5,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const uri = result.assets[0].uri;
+      setAvatarUri(uri);
+      try {
+        const stored = await AsyncStorage.getItem('users');
+        if (!stored || !user) return;
+        const users = JSON.parse(stored);
+        const index = users.findIndex((u: UserData) => u.id === user.id);
+        if (index === -1) return;
+        users[index].avatarUri = uri;
+        await AsyncStorage.setItem('users', JSON.stringify(users));
+      } catch {}
+    }
   };
 
   const saveProfile = async () => {
     if (!user) return;
     if (!editName.trim()) {
       Alert.alert('入力エラー', '名前を入力してください');
-      return;
-    }
-    const heightVal = editHeight ? parseFloat(editHeight) : undefined;
-    const weightVal = editWeight ? parseFloat(editWeight) : undefined;
-    if (heightVal !== undefined && (heightVal < 100 || heightVal > 250)) {
-      Alert.alert('入力エラー', '身長は100〜250cmの範囲で入力してください');
-      return;
-    }
-    if (weightVal !== undefined && (weightVal < 20 || weightVal > 300)) {
-      Alert.alert('入力エラー', '体重は20〜300kgの範囲で入力してください');
       return;
     }
     try {
@@ -230,22 +280,13 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
       users[index] = {
         ...users[index],
         name: editName.trim(),
-        age: parseInt(editAge) || user.age,
-        healthData: {
-          ...users[index].healthData,
-          height: editHeight ? parseFloat(editHeight) : undefined,
-          weight: editWeight ? parseFloat(editWeight) : undefined,
-          gender: editGender,
-          activityLevel: editActivity,
-        },
       };
 
       await AsyncStorage.setItem('users', JSON.stringify(users));
       setUser(users[index]);
       setEditingProfile(false);
-      Alert.alert('保存完了', 'プロフィールを更新しました');
-    } catch (error) {
-      console.error('プロフィール保存エラー:', error);
+      Alert.alert('保存完了', '名前を更新しました');
+    } catch {
       Alert.alert('エラー', '保存に失敗しました');
     }
   };
@@ -356,36 +397,53 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     );
   };
 
+  const FEEDBACK_URL = 'https://docs.google.com/forms/d/e/1FAIpQLSfP-BY6NVWGo_ary7IOqvWCia9i025lSjvvOkUR09-7xsRmow/viewform';
+
   const handleFeedback = async () => {
-    const isAvailable = await MailComposer.isAvailableAsync();
-    if (!isAvailable) {
-      Alert.alert(
-        'メール未設定',
-        'メールアプリが設定されていません。smartmeals.feedback@gmail.com までご連絡ください。'
-      );
-      return;
-    }
     try {
-      await MailComposer.composeAsync({
-        recipients: ['smartmeals.feedback@gmail.com'],
-        subject: 'SmartMeals フィードバック',
-        body: `\n\n---\nアプリバージョン: 1.0.0\nユーザー名: ${user?.name || '未設定'}`,
-      });
+      await WebBrowser.openBrowserAsync(FEEDBACK_URL);
     } catch {
-      Alert.alert('エラー', 'メールの起動に失敗しました');
+      Alert.alert('エラー', 'ブラウザの起動に失敗しました');
     }
   };
 
-  const handleAbout = () => {
-    Alert.alert(
-      'SmartMeals について',
-      '糖尿病患者のための血糖値管理・食事提案アプリ\n\nバージョン: 1.0.0\n開発: SmartMeals Team\n\n© 2024 SmartMeals. All rights reserved.',
-      [{ text: 'OK' }]
-    );
-  };
+  const faqItems = [
+    {
+      q: '血糖値はいつ記録すればいいですか？',
+      a: '食前または食後2時間を目安に記録してください。朝・昼・夜の食事タイミングに合わせて記録すると、トレンドが把握しやすくなります。',
+    },
+    {
+      q: 'HbA1cはいつ入力すればいいですか？',
+      a: '通院時に検査結果が出たタイミングで入力してください。HbA1cの値に応じて献立の糖質量が自動で最適化されます。',
+    },
+    {
+      q: '献立のレパートリーはどのくらいありますか？',
+      a: '朝食35種類、昼食38種類、夕食38種類の合計111種類です。糖尿病に配慮した低GI・低糖質メニューを中心に、和食・洋食のバリエーションがあります。',
+    },
+    {
+      q: '食材の代替機能はどう使いますか？',
+      a: '献立の詳細画面で食材横のアイコンをタップすると、栄養バランスを保った代替食材が提案されます。苦手な食材やアレルギーがある場合にご活用ください。',
+    },
+    {
+      q: 'データのバックアップはどうすればいいですか？',
+      a: '設定画面の「データをエクスポート」からCSVファイルとして書き出せます。定期的にエクスポートして保存することをおすすめします。',
+    },
+    {
+      q: '通知が届きません',
+      a: '端末の設定アプリから、SmartMealsの通知が許可されているか確認してください。また、省電力モードや「おやすみモード」が有効になっていると通知が届かない場合があります。',
+    },
+    {
+      q: 'データを全て消したい場合は？',
+      a: '設定画面の「データをクリア」から全データを削除できます。また、アプリのアンインストールでも端末内のデータは全て消去されます。',
+    },
+    {
+      q: 'このアプリは医療アドバイスを提供しますか？',
+      a: 'いいえ。本アプリは食事管理の補助ツールであり、医療行為や医療アドバイスを提供するものではありません。食事内容の変更は必ず担当医師にご相談ください。',
+    },
+  ];
 
-  const PRIVACY_POLICY_URL = 'https://smartmeals.app/privacy';
-  const TERMS_URL = 'https://smartmeals.app/terms';
+  const PRIVACY_POLICY_URL = 'https://dune-lumber-1cf.notion.site/33618a8d471e80779246da10c3b79800';
+  const TERMS_URL = 'https://dune-lumber-1cf.notion.site/33618a8d471e80679d75c4b86a01f6d1';
 
   const handleOpenUrl = async (url: string, title: string) => {
     try {
@@ -420,93 +478,50 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>👤 アカウント</Text>
 
-              {!editingProfile ? (
-                <>
-                  <View style={styles.profileCard}>
-                    <Text style={styles.profileAvatar}>{user.avatar}</Text>
-                    <View style={styles.profileInfo}>
+              <View style={styles.profileCard}>
+                <TouchableOpacity onPress={pickAvatar} style={styles.avatarContainer}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarImage} />
+                  ) : (
+                    <View style={styles.avatarPlaceholder}>
+                      <Ionicons name="camera-outline" size={28} color={colors.textMuted} />
+                      <Text style={styles.avatarPlaceholderText}>タップで追加</Text>
+                    </View>
+                  )}
+                  {avatarUri && (
+                    <View style={styles.avatarBadge}>
+                      <Ionicons name="camera" size={14} color="#fff" />
+                    </View>
+                  )}
+                </TouchableOpacity>
+                <View style={styles.profileNameSection}>
+                  {!editingProfile ? (
+                    <>
                       <Text style={styles.profileName}>{user.name}</Text>
-                      <Text style={styles.profileSub}>{user.age}歳</Text>
-                      {user.healthData && (
-                        <Text style={styles.profileSub}>
-                          {user.healthData.height ? `${user.healthData.height}cm` : ''}
-                          {user.healthData.height && user.healthData.weight ? ' / ' : ''}
-                          {user.healthData.weight ? `${user.healthData.weight}kg` : ''}
-                          {user.healthData.gender ? ` / ${user.healthData.gender === 'male' ? '男性' : '女性'}` : ''}
-                        </Text>
-                      )}
-                    </View>
-                    <TouchableOpacity onPress={startEditProfile} style={styles.profileEditButton}>
-                      <Ionicons name="pencil" size={18} color="#007AFF" />
-                    </TouchableOpacity>
-                  </View>
-
-                  <View style={styles.loginHint}>
-                    <Ionicons name="log-in-outline" size={18} color="#8E8E93" />
-                    <Text style={styles.loginHintText}>Google / メールログインは今後対応予定</Text>
-                  </View>
-                </>
-              ) : (
-                <View style={styles.editForm}>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>名前</Text>
-                    <TextInput style={styles.editInput} value={editName} onChangeText={setEditName} placeholder="名前" placeholderTextColor="#999" />
-                  </View>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>年齢</Text>
-                    <TextInput style={styles.editInput} value={editAge} onChangeText={setEditAge} placeholder="30" keyboardType="numeric" placeholderTextColor="#999" />
-                  </View>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>身長</Text>
-                    <TextInput style={styles.editInput} value={editHeight} onChangeText={setEditHeight} placeholder="170" keyboardType="decimal-pad" placeholderTextColor="#999" />
-                    <Text style={styles.editUnit}>cm</Text>
-                  </View>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>体重</Text>
-                    <TextInput style={styles.editInput} value={editWeight} onChangeText={setEditWeight} placeholder="65" keyboardType="decimal-pad" placeholderTextColor="#999" />
-                    <Text style={styles.editUnit}>kg</Text>
-                  </View>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>性別</Text>
-                    <View style={styles.toggleRow}>
-                      <TouchableOpacity
-                        style={[styles.toggleButton, editGender === 'male' && styles.toggleButtonActive]}
-                        onPress={() => setEditGender('male')}
-                      >
-                        <Text style={[styles.toggleText, editGender === 'male' && styles.toggleTextActive]}>男性</Text>
+                      <TouchableOpacity onPress={startEditProfile}>
+                        <Text style={styles.profileEditLink}>名前を変更</Text>
                       </TouchableOpacity>
-                      <TouchableOpacity
-                        style={[styles.toggleButton, editGender === 'female' && styles.toggleButtonActive]}
-                        onPress={() => setEditGender('female')}
-                      >
-                        <Text style={[styles.toggleText, editGender === 'female' && styles.toggleTextActive]}>女性</Text>
+                    </>
+                  ) : (
+                    <View style={styles.editNameRow}>
+                      <TextInput
+                        style={styles.editNameInput}
+                        value={editName}
+                        onChangeText={setEditName}
+                        placeholder="名前"
+                        placeholderTextColor={colors.placeholder}
+                        autoFocus
+                      />
+                      <TouchableOpacity style={styles.editNameSave} onPress={saveProfile}>
+                        <Text style={styles.editNameSaveText}>保存</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => setEditingProfile(false)}>
+                        <Text style={styles.editNameCancel}>取消</Text>
                       </TouchableOpacity>
                     </View>
-                  </View>
-                  <View style={styles.editRow}>
-                    <Text style={styles.editLabel}>活動量</Text>
-                    <View style={styles.toggleRow}>
-                      {([['light', '軽い'], ['moderate', '普通'], ['high', '多い']] as const).map(([value, label]) => (
-                        <TouchableOpacity
-                          key={value}
-                          style={[styles.toggleButton, editActivity === value && styles.toggleButtonActive]}
-                          onPress={() => setEditActivity(value)}
-                        >
-                          <Text style={[styles.toggleText, editActivity === value && styles.toggleTextActive]}>{label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </View>
-                  <View style={styles.editActions}>
-                    <TouchableOpacity style={styles.cancelBtn} onPress={() => setEditingProfile(false)}>
-                      <Text style={styles.cancelBtnText}>キャンセル</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.saveBtn} onPress={saveProfile}>
-                      <Text style={styles.saveBtnText}>保存</Text>
-                    </TouchableOpacity>
-                  </View>
+                  )}
                 </View>
-              )}
+              </View>
             </View>
           )}
 
@@ -655,29 +670,68 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>記録リマインダー</Text>
-                <Text style={styles.settingDescription}>毎日指定時刻に記録を促す通知</Text>
+                <Text style={styles.settingLabel}>リマインダー</Text>
+                <Text style={styles.settingDescription}>血糖値の記録を促す通知</Text>
               </View>
               <Switch
-                value={settings.notifications}
-                onValueChange={handleToggleNotifications}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
+                value={reminderSettings.enabled}
+                onValueChange={handleToggleReminder}
+                trackColor={{ false: colors.sectionBg, true: colors.primary }}
                 thumbColor="#fff"
               />
             </View>
 
-            {settings.notifications && (
-              <TouchableOpacity
-                style={styles.settingItem}
-                onPress={openTimePicker}
-              >
-                <View style={styles.settingLeft}>
-                  <Text style={styles.settingLabel}>リマインダー時刻</Text>
+            {reminderSettings.enabled && (
+              <>
+                {/* 通知時刻 */}
+                {reminderSettings.slots.map((config, index) => (
+                  <View key={index} style={styles.settingItem}>
+                    <TouchableOpacity
+                      style={styles.reminderSlotLeft}
+                      onPress={() => openSlotTimePicker(index)}
+                    >
+                      <Ionicons name="time-outline" size={20} color={colors.primary} />
+                      <Text style={styles.reminderTime}>
+                        {notificationService.formatTime(config.hour, config.minute)}
+                      </Text>
+                    </TouchableOpacity>
+                    {reminderSettings.slots.length > 1 && (
+                      <TouchableOpacity onPress={() => removeSlot(index)} style={{ padding: 4 }}>
+                        <Ionicons name="close-circle" size={22} color={colors.danger} />
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+
+                {/* 追加ボタン */}
+                {reminderSettings.slots.length < MAX_SLOTS && (
+                  <TouchableOpacity style={styles.addSlotButton} onPress={addSlot}>
+                    <Ionicons name="add-circle-outline" size={20} color={colors.primary} />
+                    <Text style={styles.addSlotText}>通知を追加</Text>
+                  </TouchableOpacity>
+                )}
+
+                {/* 曜日選択 */}
+                <View style={styles.settingItem}>
+                  <View style={styles.dayRow}>
+                    {([0, 1, 2, 3, 4, 5, 6] as DayOfWeek[]).map(day => {
+                      const labels = ['日', '月', '火', '水', '木', '金', '土'];
+                      const active = reminderSettings.days[day];
+                      return (
+                        <TouchableOpacity
+                          key={day}
+                          style={[styles.dayChip, active && styles.dayChipActive]}
+                          onPress={() => toggleDay(day)}
+                        >
+                          <Text style={[styles.dayChipText, active && styles.dayChipTextActive]}>
+                            {labels[day]}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
-                <Text style={{ fontSize: 16, color: '#007AFF', fontWeight: '600' }}>
-                  {settings.reminderTime}
-                </Text>
-              </TouchableOpacity>
+              </>
             )}
 
             {showTimePicker && (
@@ -746,19 +800,6 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>🔒 プライバシー</Text>
             
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>使用状況分析</Text>
-                <Text style={styles.settingDescription}>アプリ改善のための匿名データ収集</Text>
-              </View>
-              <Switch
-                value={settings.analytics}
-                onValueChange={() => toggleSetting('analytics')}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
-                thumbColor="#fff"
-              />
-            </View>
-
             <TouchableOpacity style={styles.actionItem} onPress={() => handleOpenUrl(PRIVACY_POLICY_URL, 'プライバシーポリシー')}>
               <Ionicons name="document-text-outline" size={20} color="#007AFF" />
               <Text style={styles.actionLabel}>プライバシーポリシー</Text>
@@ -782,13 +823,13 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
               <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => setShowFaqModal(true)}>
               <Ionicons name="help-circle-outline" size={20} color="#007AFF" />
               <Text style={styles.actionLabel}>ヘルプ・FAQ</Text>
               <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.actionItem} onPress={handleAbout}>
+            <TouchableOpacity style={styles.actionItem} onPress={() => setShowAboutModal(true)}>
               <Ionicons name="information-circle-outline" size={20} color="#007AFF" />
               <Text style={styles.actionLabel}>SmartMeals について</Text>
               <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
@@ -803,6 +844,96 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           <View style={{ height: 50 }} />
         </ScrollView>
+
+        {/* ヘルプ・FAQ モーダル */}
+        <Modal
+          visible={showFaqModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowFaqModal(false)}
+        >
+          <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => setShowFaqModal(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>ヘルプ・FAQ</Text>
+              <View style={styles.placeholder} />
+            </View>
+            <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+              <View style={{ paddingVertical: 8 }}>
+                {faqItems.map((item, index) => (
+                  <View key={index}>
+                    <TouchableOpacity
+                      style={styles.faqQuestion}
+                      onPress={() => setExpandedFaq(expandedFaq === index ? null : index)}
+                    >
+                      <Text style={styles.faqQuestionText}>{item.q}</Text>
+                      <Ionicons
+                        name={expandedFaq === index ? 'chevron-up' : 'chevron-down'}
+                        size={18}
+                        color={colors.textMuted}
+                      />
+                    </TouchableOpacity>
+                    {expandedFaq === index && (
+                      <View style={styles.faqAnswer}>
+                        <Text style={styles.faqAnswerText}>{item.a}</Text>
+                      </View>
+                    )}
+                  </View>
+                ))}
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
+
+        {/* SmartMeals について モーダル */}
+        <Modal
+          visible={showAboutModal}
+          animationType="slide"
+          presentationStyle="pageSheet"
+          onRequestClose={() => setShowAboutModal(false)}
+        >
+          <SafeAreaView style={styles.container}>
+            <View style={styles.header}>
+              <TouchableOpacity onPress={() => setShowAboutModal(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={24} color={colors.primary} />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>SmartMeals について</Text>
+              <View style={styles.placeholder} />
+            </View>
+            <ScrollView style={styles.scrollView} contentContainerStyle={{ padding: 20 }}>
+              <View style={styles.aboutHeader}>
+                <Text style={styles.aboutAppName}>SmartMeals</Text>
+                <Text style={styles.aboutVersion}>バージョン 1.1.0</Text>
+              </View>
+
+              <Text style={styles.aboutDescription}>
+                SmartMealsは、糖尿病と診断された方の日々の食事管理をサポートするアプリです。
+              </Text>
+
+              <View style={styles.aboutFeatureSection}>
+                <Text style={styles.aboutFeatureTitle}>主な機能</Text>
+                <Text style={styles.aboutFeatureItem}>・ 血糖値・HbA1cの記録とトレンド表示</Text>
+                <Text style={styles.aboutFeatureItem}>・ あなたの数値に合わせたパーソナライズ献立提案</Text>
+                <Text style={styles.aboutFeatureItem}>・ 111種類の糖尿病対応レシピ</Text>
+                <Text style={styles.aboutFeatureItem}>・ 食材の代替提案と買い物リスト生成</Text>
+                <Text style={styles.aboutFeatureItem}>・ 栄養サマリーと目標管理</Text>
+              </View>
+
+              <View style={styles.aboutFeatureSection}>
+                <Text style={styles.aboutFeatureTitle}>ご注意</Text>
+                <Text style={styles.aboutNote}>
+                  本アプリは食事管理の補助ツールです。医療行為や医療アドバイスを提供するものではありません。食事内容の変更は必ず担当医師にご相談ください。
+                </Text>
+              </View>
+
+              <View style={styles.aboutFooter}>
+                <Text style={styles.aboutCopyright}>© 2026 SmartMeals</Text>
+              </View>
+            </ScrollView>
+          </SafeAreaView>
+        </Modal>
       </SafeAreaView>
     </Modal>
   );
@@ -905,11 +1036,10 @@ const createSettingsStyles = (c: ReturnType<typeof useThemeColors>) => StyleShee
   },
   // ユーザー情報
   profileCard: {
-    flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.surface,
     paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingVertical: 20,
     borderTopWidth: 0.5,
     borderTopColor: c.border,
     borderBottomWidth: 0.5,
@@ -1186,4 +1316,42 @@ const createSettingsStyles = (c: ReturnType<typeof useThemeColors>) => StyleShee
   glucoseRangeRow: { flexDirection: 'row', alignItems: 'center' },
   glucoseRangeInput: { borderWidth: 1, borderColor: c.inputBorder, borderRadius: 8, padding: 8, fontSize: 15, width: 60, textAlign: 'center', backgroundColor: c.inputBg, color: c.text },
   glucoseRangeSeparator: { fontSize: 16, color: c.textSecondary, marginHorizontal: 6 },
+  reminderSlotLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  reminderTime: { fontSize: 18, color: c.text, fontWeight: '700' },
+  addSlotButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderTopWidth: 0.5, borderTopColor: c.border, borderBottomWidth: 0.5, borderBottomColor: c.border },
+  addSlotText: { fontSize: 15, color: c.primary, fontWeight: '500' },
+  // FAQ
+  faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: c.border },
+  faqQuestionText: { fontSize: 15, fontWeight: '500', color: c.text, flex: 1, marginRight: 8 },
+  faqAnswer: { backgroundColor: c.sectionBg, paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 0.5, borderBottomColor: c.border },
+  faqAnswerText: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
+  // About
+  aboutHeader: { alignItems: 'center', marginBottom: 24, paddingTop: 12 },
+  aboutAppName: { fontSize: 28, fontWeight: '700', color: c.text, marginBottom: 4 },
+  aboutVersion: { fontSize: 14, color: c.textMuted },
+  aboutDescription: { fontSize: 15, color: c.text, lineHeight: 24, marginBottom: 20 },
+  aboutFeatureSection: { marginBottom: 20 },
+  aboutFeatureTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 10 },
+  aboutFeatureItem: { fontSize: 14, color: c.textSecondary, lineHeight: 24, paddingLeft: 4 },
+  aboutNote: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
+  aboutFooter: { alignItems: 'center', marginTop: 24, paddingVertical: 16 },
+  aboutCopyright: { fontSize: 13, color: c.textMuted },
+  // Avatar
+  avatarContainer: { position: 'relative', marginBottom: 12 },
+  avatarImage: { width: 100, height: 100, borderRadius: 50 },
+  avatarPlaceholder: { width: 100, height: 100, borderRadius: 50, backgroundColor: c.sectionBg, borderWidth: 2, borderColor: c.border, borderStyle: 'dashed', alignItems: 'center', justifyContent: 'center' },
+  avatarPlaceholderText: { fontSize: 11, color: c.textMuted, marginTop: 4 },
+  avatarBadge: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: c.surface },
+  profileNameSection: { alignItems: 'center' },
+  profileEditLink: { fontSize: 13, color: c.primary, marginTop: 4 },
+  editNameRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  editNameInput: { flex: 1, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 8, paddingVertical: 6, paddingHorizontal: 10, fontSize: 16, color: c.text, backgroundColor: c.inputBg },
+  editNameSave: { backgroundColor: c.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 },
+  editNameSaveText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  editNameCancel: { color: c.textMuted, fontSize: 13 },
+  dayRow: { flexDirection: 'row', gap: 6, justifyContent: 'center', flex: 1, paddingVertical: 4 },
+  dayChip: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.sectionBg, alignItems: 'center', justifyContent: 'center' },
+  dayChipActive: { backgroundColor: c.primary },
+  dayChipText: { fontSize: 13, fontWeight: '600', color: c.textSecondary },
+  dayChipTextActive: { color: '#fff' },
 });

@@ -50,12 +50,13 @@ class DataExportService {
       const records: GlucoseRecord[] = JSON.parse(data).filter((r: GlucoseRecord) => r.userId === userId);
       if (records.length === 0) return null;
 
-      const header = '日時,血糖値(mg/dL),食事タイミング,メモ';
+      const header = '日時,血糖値(mg/dL),食事タイミング';
       const rows = records
         .sort((a, b) => a.timestamp - b.timestamp)
         .map(r => {
-          const date = new Date(r.timestamp).toLocaleString('ja-JP');
-          return `${date},${r.value},${r.mealType},${this.escapeCsv(r.mealNote || '')}`;
+          const d = new Date(r.timestamp);
+          const date = `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+          return `${date},${r.value},${r.mealType}`;
         });
       return [header, ...rows].join('\n');
     } catch {
@@ -70,12 +71,12 @@ class DataExportService {
       const records: WeeklyRecord[] = JSON.parse(data).filter((r: WeeklyRecord) => r.userId === userId);
       if (records.length === 0) return null;
 
-      const header = '週開始日,体重(kg),HbA1c(%),血圧(収縮/拡張),運動,体調';
+      const header = '週開始日,HbA1c(%)';
       const rows = records
         .sort((a, b) => a.timestamp - b.timestamp)
+        .filter(r => r.hba1c != null)
         .map(r => {
-          const bp = r.bloodPressure ? `${r.bloodPressure.systolic}/${r.bloodPressure.diastolic}` : '';
-          return `${r.weekStart},${r.weight ?? ''},${r.hba1c ?? ''},${bp},${this.escapeCsv(r.exercise || '')},${this.escapeCsv(r.condition || '')}`;
+          return `${r.weekStart},${r.hba1c}`;
         });
       return [header, ...rows].join('\n');
     } catch {

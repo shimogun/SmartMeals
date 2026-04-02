@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import mealStorageService from '../services/mealStorageService';
 import { GeneratedMeal } from '../types';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 interface DailyNutritionSummaryProps {
   date: string; // YYYY-MM-DD
   meals?: GeneratedMeal[];
-  medicalGuidance?: {
-    dailyCarbLimit?: number;
-    dailyCalorieLimit?: number;
+  autoLimits?: {
+    dailyCarbLimit: number;
+    dailyCalorieLimit: number;
   };
 }
 
@@ -50,11 +51,12 @@ const getMealCategory = (meal: GeneratedMeal): string => {
 };
 
 // 栄養素のプログレスバー
-const NutrientBar = ({ label, value, target, unit }: {
+const NutrientBar = ({ label, value, target, unit, barStyles }: {
   label: string;
   value: number;
   target: number;
   unit: string;
+  barStyles: ReturnType<typeof createBarStyles>;
 }) => {
   const ratio = target > 0 ? value / target : 0;
   const percentage = Math.min(ratio * 100, 100);
@@ -80,14 +82,16 @@ const NutrientBar = ({ label, value, target, unit }: {
   );
 };
 
-export default function DailyNutritionSummary({ date, meals: propMeals, medicalGuidance }: DailyNutritionSummaryProps) {
+export default function DailyNutritionSummary({ date, meals: propMeals, autoLimits }: DailyNutritionSummaryProps) {
+  const colors = useThemeColors();
+  const styles = createNutritionStyles(colors);
+  const barStyles = createBarStyles(colors);
   const [meals, setMeals] = useState<GeneratedMeal[]>([]);
   const [loading, setLoading] = useState(true);
 
   const targets = {
     ...DAILY_TARGETS,
-    ...(medicalGuidance?.dailyCalorieLimit ? { calories: medicalGuidance.dailyCalorieLimit } : {}),
-    ...(medicalGuidance?.dailyCarbLimit ? { carbs: medicalGuidance.dailyCarbLimit } : {}),
+    ...(autoLimits ? { calories: autoLimits.dailyCalorieLimit, carbs: autoLimits.dailyCarbLimit } : {}),
   };
 
   useEffect(() => {
@@ -145,9 +149,9 @@ export default function DailyNutritionSummary({ date, meals: propMeals, medicalG
     { calories: 0, carbs: 0, protein: 0, fat: 0 }
   );
 
-  const hasOverage = medicalGuidance && (
-    (medicalGuidance.dailyCalorieLimit && totals.calories > medicalGuidance.dailyCalorieLimit) ||
-    (medicalGuidance.dailyCarbLimit && totals.carbs > medicalGuidance.dailyCarbLimit)
+  const hasOverage = autoLimits && (
+    totals.calories > autoLimits.dailyCalorieLimit ||
+    totals.carbs > autoLimits.dailyCarbLimit
   );
 
   // 食事カテゴリ別に分類
@@ -180,24 +184,28 @@ export default function DailyNutritionSummary({ date, meals: propMeals, medicalG
           value={totals.calories}
           target={targets.calories}
           unit="kcal"
+          barStyles={barStyles}
         />
         <NutrientBar
           label="炭水化物"
           value={totals.carbs}
           target={targets.carbs}
           unit="g"
+          barStyles={barStyles}
         />
         <NutrientBar
           label="たんぱく質"
           value={totals.protein}
           target={targets.protein}
           unit="g"
+          barStyles={barStyles}
         />
         <NutrientBar
           label="脂質"
           value={totals.fat}
           target={targets.fat}
           unit="g"
+          barStyles={barStyles}
         />
       </View>
 
@@ -232,7 +240,7 @@ export default function DailyNutritionSummary({ date, meals: propMeals, medicalG
   );
 }
 
-const barStyles = StyleSheet.create({
+const createBarStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     marginBottom: 10,
   },
@@ -244,15 +252,15 @@ const barStyles = StyleSheet.create({
   label: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
   },
   value: {
     fontSize: 12,
-    color: '#666',
+    color: c.textSecondary,
   },
   track: {
     height: 8,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: c.sectionBg,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -262,13 +270,13 @@ const barStyles = StyleSheet.create({
   },
 });
 
-const styles = StyleSheet.create({
+const createNutritionStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
-    backgroundColor: '#fff',
+    backgroundColor: c.card,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
+    shadowColor: c.cardShadow,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.08,
     shadowRadius: 8,
@@ -277,18 +285,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: c.text,
     marginBottom: 14,
   },
   loadingText: {
     fontSize: 14,
-    color: '#999',
+    color: c.textMuted,
     textAlign: 'center',
     paddingVertical: 12,
   },
   noDataText: {
     fontSize: 14,
-    color: '#999',
+    color: c.textMuted,
     textAlign: 'center',
     paddingVertical: 12,
   },
@@ -297,13 +305,13 @@ const styles = StyleSheet.create({
   },
   breakdownContainer: {
     borderTopWidth: 1,
-    borderTopColor: '#f0f0f0',
+    borderTopColor: c.borderLight,
     paddingTop: 12,
   },
   breakdownTitle: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#555',
+    color: c.textSecondary,
     marginBottom: 8,
   },
   breakdownRow: {
@@ -315,15 +323,15 @@ const styles = StyleSheet.create({
   breakdownCategory: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#444',
+    color: c.text,
     minWidth: 40,
   },
   breakdownValues: {
     fontSize: 12,
-    color: '#666',
+    color: c.textSecondary,
     flex: 1,
     textAlign: 'right',
   },
-  warningBanner: { backgroundColor: '#FFEBEE', borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
-  warningText: { color: '#F44336', fontSize: 13, fontWeight: '600' },
+  warningBanner: { backgroundColor: c.dangerBg, borderRadius: 8, padding: 8, marginBottom: 8, alignItems: 'center' },
+  warningText: { color: c.danger, fontSize: 13, fontWeight: '600' },
 });

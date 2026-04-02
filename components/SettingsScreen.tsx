@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   Modal,
   View,
@@ -20,6 +20,8 @@ import dataExportService from '../services/dataExportService';
 import { FOOD_CATEGORIES } from '../constants/foodCategories';
 import notificationService from '../services/notificationService';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { ThemeContext } from '../contexts/ThemeContext';
+import { useThemeColors } from '../hooks/useThemeColors';
 
 interface SettingsScreenProps {
   visible: boolean;
@@ -62,6 +64,8 @@ type UserData = {
 };
 
 export default function SettingsScreen({ visible, onClose }: SettingsScreenProps) {
+  const { isDark, toggleDark } = useContext(ThemeContext);
+  const colors = useThemeColors();
   const [settings, setSettings] = useState<SettingsData>(defaultSettings);
   const [user, setUser] = useState<UserData | null>(null);
   const [editingProfile, setEditingProfile] = useState(false);
@@ -77,8 +81,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [targetHba1c, setTargetHba1c] = useState('');
   const [glucoseMin, setGlucoseMin] = useState('');
   const [glucoseMax, setGlucoseMax] = useState('');
-  const [dailyCarbLimit, setDailyCarbLimit] = useState('');
-  const [dailyCalorieLimit, setDailyCalorieLimit] = useState('');
+  // dailyCarbLimit, dailyCalorieLimit は自動算出に移行（state不要）
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [pickerDate, setPickerDate] = useState<Date>(() => {
     const d = new Date();
@@ -181,8 +184,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             if (mg.targetHba1c != null) setTargetHba1c(String(mg.targetHba1c));
             if (mg.glucoseMin != null) setGlucoseMin(String(mg.glucoseMin));
             if (mg.glucoseMax != null) setGlucoseMax(String(mg.glucoseMax));
-            if (mg.dailyCarbLimit != null) setDailyCarbLimit(String(mg.dailyCarbLimit));
-            if (mg.dailyCalorieLimit != null) setDailyCalorieLimit(String(mg.dailyCalorieLimit));
+            // dailyCarbLimit, dailyCalorieLimit は自動算出に移行
           }
         }
       }
@@ -281,8 +283,6 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           targetHba1c: targetHba1c ? parseFloat(targetHba1c) : undefined,
           glucoseMin: glucoseMin ? parseInt(glucoseMin) : undefined,
           glucoseMax: glucoseMax ? parseInt(glucoseMax) : undefined,
-          dailyCarbLimit: dailyCarbLimit ? parseInt(dailyCarbLimit) : undefined,
-          dailyCalorieLimit: dailyCalorieLimit ? parseInt(dailyCalorieLimit) : undefined,
         };
         await AsyncStorage.setItem('users', JSON.stringify(users));
         Alert.alert('保存完了', '指導値を更新しました');
@@ -395,6 +395,8 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
     }
   };
 
+  const styles = createSettingsStyles(colors);
+
   return (
     <Modal
       visible={visible}
@@ -406,7 +408,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
         {/* ヘッダー */}
         <View style={styles.header}>
           <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-            <Ionicons name="close" size={24} color="#007AFF" />
+            <Ionicons name="close" size={24} color={colors.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>設定</Text>
           <View style={styles.placeholder} />
@@ -574,29 +576,19 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           {/* 医師の指導値 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>医師の指導値</Text>
-            <View style={styles.guidanceRow}>
+            <Text style={styles.guidanceHint}>入力するとカロリー・糖質の目標が自動で最適化されます</Text>
+            <View style={styles.guidanceRowVertical}>
               <Text style={styles.guidanceLabel}>HbA1c目標</Text>
               <TextInput style={styles.guidanceInput} value={targetHba1c} onChangeText={setTargetHba1c} placeholder="例: 6.5" placeholderTextColor="#999" keyboardType="decimal-pad" />
             </View>
-            <View style={styles.guidanceRow}>
-              <Text style={styles.guidanceLabel}>血糖値目標（下限）</Text>
-              <TextInput style={styles.guidanceInput} value={glucoseMin} onChangeText={setGlucoseMin} placeholder="例: 80" placeholderTextColor="#999" keyboardType="number-pad" />
-              <Text style={styles.guidanceUnit}>mg/dL</Text>
-            </View>
-            <View style={styles.guidanceRow}>
-              <Text style={styles.guidanceLabel}>血糖値目標（上限）</Text>
-              <TextInput style={styles.guidanceInput} value={glucoseMax} onChangeText={setGlucoseMax} placeholder="例: 140" placeholderTextColor="#999" keyboardType="number-pad" />
-              <Text style={styles.guidanceUnit}>mg/dL</Text>
-            </View>
-            <View style={styles.guidanceRow}>
-              <Text style={styles.guidanceLabel}>1日の糖質上限</Text>
-              <TextInput style={styles.guidanceInput} value={dailyCarbLimit} onChangeText={setDailyCarbLimit} placeholder="例: 200" placeholderTextColor="#999" keyboardType="number-pad" />
-              <Text style={styles.guidanceUnit}>g</Text>
-            </View>
-            <View style={styles.guidanceRow}>
-              <Text style={styles.guidanceLabel}>1日のカロリー上限</Text>
-              <TextInput style={styles.guidanceInput} value={dailyCalorieLimit} onChangeText={setDailyCalorieLimit} placeholder="例: 1800" placeholderTextColor="#999" keyboardType="number-pad" />
-              <Text style={styles.guidanceUnit}>kcal</Text>
+            <View style={styles.guidanceRowVertical}>
+              <Text style={styles.guidanceLabel}>血糖値目標範囲</Text>
+              <View style={styles.glucoseRangeRow}>
+                <TextInput style={styles.glucoseRangeInput} value={glucoseMin} onChangeText={setGlucoseMin} placeholder="80" placeholderTextColor="#999" keyboardType="number-pad" />
+                <Text style={styles.glucoseRangeSeparator}>〜</Text>
+                <TextInput style={styles.glucoseRangeInput} value={glucoseMax} onChangeText={setGlucoseMax} placeholder="130" placeholderTextColor="#999" keyboardType="number-pad" />
+                <Text style={styles.guidanceUnit}>mg/dL</Text>
+              </View>
             </View>
             <TouchableOpacity style={styles.saveFoodButton} onPress={saveMedicalGuidance}>
               <Text style={styles.saveFoodButtonText}>指導値を保存</Text>
@@ -706,61 +698,18 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
                 <Text style={styles.settingLabel}>ダークモード</Text>
-                <Text style={styles.settingDescription}>今後のアップデートで対応予定</Text>
               </View>
               <Switch
-                value={settings.darkMode}
-                onValueChange={() => toggleSetting('darkMode')}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
+                value={isDark}
+                onValueChange={toggleDark}
+                trackColor={{ false: '#E0E0E0', true: colors.primary }}
                 thumbColor="#fff"
-                disabled={true}
               />
             </View>
 
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>カロリー表示</Text>
-                <Text style={styles.settingDescription}>献立にカロリー情報を表示</Text>
-              </View>
-              <Switch
-                value={settings.showCalories}
-                onValueChange={() => toggleSetting('showCalories')}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
-                thumbColor="#fff"
-              />
-            </View>
           </View>
 
-          {/* 献立生成 */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🍽️ 献立生成</Text>
-            
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>自動生成</Text>
-                <Text style={styles.settingDescription}>血糖値記録時に自動で献立提案</Text>
-              </View>
-              <Switch
-                value={settings.autoGeneration}
-                onValueChange={() => toggleSetting('autoGeneration')}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
-                thumbColor="#fff"
-              />
-            </View>
-
-            <View style={styles.settingItem}>
-              <View style={styles.settingLeft}>
-                <Text style={styles.settingLabel}>厳格モード</Text>
-                <Text style={styles.settingDescription}>より厳しい血糖管理向け献立</Text>
-              </View>
-              <Switch
-                value={settings.strictMode}
-                onValueChange={() => toggleSetting('strictMode')}
-                trackColor={{ false: '#E0E0E0', true: '#007AFF' }}
-                thumbColor="#fff"
-              />
-            </View>
-          </View>
+          {/* 献立生成セクションは制限レベル選択と自動算出に統合済みのため削除 */}
 
           {/* データ管理 */}
           <View style={styles.section}>
@@ -859,10 +808,10 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   );
 }
 
-const styles = StyleSheet.create({
+const createSettingsStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.background,
   },
   header: {
     flexDirection: 'row',
@@ -870,9 +819,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   closeButton: {
     padding: 4,
@@ -880,7 +829,7 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#000',
+    color: c.text,
   },
   placeholder: {
     width: 32,
@@ -894,7 +843,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: c.text,
     marginLeft: 16,
     marginBottom: 8,
   },
@@ -902,13 +851,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: c.border,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   settingLeft: {
     flex: 1,
@@ -916,28 +865,28 @@ const styles = StyleSheet.create({
   settingLabel: {
     fontSize: 16,
     fontWeight: '400',
-    color: '#000',
+    color: c.text,
     marginBottom: 2,
   },
   settingDescription: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textMuted,
   },
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: c.border,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   actionLabel: {
     fontSize: 16,
     fontWeight: '400',
-    color: '#007AFF',
+    color: c.primary,
     marginLeft: 12,
     flex: 1,
   },
@@ -947,24 +896,24 @@ const styles = StyleSheet.create({
   },
   versionText: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textMuted,
     marginBottom: 4,
   },
   copyrightText: {
     fontSize: 11,
-    color: '#8E8E93',
+    color: c.textMuted,
   },
   // ユーザー情報
   profileCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: c.border,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   profileAvatar: {
     fontSize: 36,
@@ -976,53 +925,53 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
+    color: c.text,
   },
   profileSub: {
     fontSize: 14,
-    color: '#8E8E93',
+    color: c.textMuted,
     marginTop: 2,
   },
   profileEditButton: {
     padding: 8,
   },
   healthSummary: {
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 12,
   },
   healthItem: {
     fontSize: 13,
-    color: '#666',
+    color: c.textSecondary,
   },
   loginHint: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   loginHintText: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textMuted,
     marginLeft: 8,
   },
   // 編集フォーム
   editForm: {
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderTopWidth: 0.5,
-    borderTopColor: '#E5E5EA',
+    borderTopColor: c.border,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   editRow: {
     flexDirection: 'row',
@@ -1033,22 +982,22 @@ const styles = StyleSheet.create({
     width: 50,
     fontSize: 14,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
   },
   editInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: '#ddd',
+    borderColor: c.inputBorder,
     borderRadius: 8,
     paddingVertical: 8,
     paddingHorizontal: 12,
     fontSize: 16,
-    color: '#333',
-    backgroundColor: '#f8f9fa',
+    color: c.text,
+    backgroundColor: c.inputBg,
   },
   editUnit: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
     marginLeft: 8,
     width: 28,
   },
@@ -1061,14 +1010,14 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingHorizontal: 14,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.sectionBg,
   },
   toggleButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
   },
   toggleText: {
     fontSize: 13,
-    color: '#666',
+    color: c.textSecondary,
     fontWeight: '600',
   },
   toggleTextActive: {
@@ -1084,18 +1033,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.sectionBg,
   },
   cancelBtnText: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
     fontWeight: '600',
   },
   saveBtn: {
     paddingVertical: 8,
     paddingHorizontal: 20,
     borderRadius: 8,
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
   },
   saveBtnText: {
     fontSize: 14,
@@ -1107,11 +1056,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
     alignItems: 'center',
   },
   foodTag: {
@@ -1120,30 +1069,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   foodTagLiked: {
-    backgroundColor: '#E8F5E9',
+    backgroundColor: c.successBg,
     borderWidth: 1,
-    borderColor: '#4CAF50',
+    borderColor: c.success,
   },
   foodTagDisliked: {
-    backgroundColor: '#FFEBEE',
+    backgroundColor: c.dangerBg,
     borderWidth: 1,
-    borderColor: '#F44336',
+    borderColor: c.danger,
   },
   foodTagText: {
     fontSize: 13,
-    color: '#333',
+    color: c.text,
     fontWeight: '500',
   },
   emptyFoodText: {
     fontSize: 13,
-    color: '#8E8E93',
+    color: c.textMuted,
     fontStyle: 'italic',
   },
   addFoodButton: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: '#F0F0F0',
+    backgroundColor: c.sectionBg,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1151,7 +1100,7 @@ const styles = StyleSheet.create({
     margin: 16,
     paddingVertical: 12,
     borderRadius: 10,
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
     alignItems: 'center',
   },
   saveFoodButtonText: {
@@ -1166,7 +1115,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   foodModalContent: {
-    backgroundColor: '#F2F2F7',
+    backgroundColor: c.background,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     maxHeight: '80%',
@@ -1178,21 +1127,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 16,
     paddingVertical: 14,
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     borderBottomWidth: 0.5,
-    borderBottomColor: '#E5E5EA',
+    borderBottomColor: c.border,
   },
   foodModalTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#000',
+    color: c.text,
   },
   foodCategoryLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#8E8E93',
+    color: c.textMuted,
     marginTop: 16,
     marginBottom: 8,
     marginLeft: 16,
@@ -1208,28 +1157,33 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     paddingVertical: 6,
     paddingHorizontal: 14,
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: c.border,
   },
   foodChipLiked: {
-    backgroundColor: '#E8F5E9',
-    borderColor: '#4CAF50',
+    backgroundColor: c.successBg,
+    borderColor: c.success,
   },
   foodChipDisliked: {
-    backgroundColor: '#FFEBEE',
-    borderColor: '#F44336',
+    backgroundColor: c.dangerBg,
+    borderColor: c.danger,
   },
   foodChipText: {
     fontSize: 13,
-    color: '#333',
+    color: c.text,
   },
   foodChipTextSelected: {
     fontWeight: '600',
-    color: '#000',
+    color: c.text,
   },
   guidanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
-  guidanceLabel: { flex: 1, fontSize: 14, color: '#333' },
-  guidanceInput: { width: 80, backgroundColor: '#f9f9f9', borderRadius: 8, padding: 8, fontSize: 16, textAlign: 'center', borderWidth: 1, borderColor: '#e0e0e0', color: '#333' },
-  guidanceUnit: { fontSize: 13, color: '#888', width: 40 },
+  guidanceLabel: { flex: 1, fontSize: 14, color: c.text },
+  guidanceInput: { width: 80, backgroundColor: c.inputBg, borderRadius: 8, padding: 8, fontSize: 16, textAlign: 'center', borderWidth: 1, borderColor: c.inputBorder, color: c.text },
+  guidanceUnit: { fontSize: 13, color: c.textMuted, marginLeft: 4 },
+  guidanceHint: { fontSize: 12, color: c.textMuted, marginBottom: 12, lineHeight: 18, paddingHorizontal: 16 },
+  guidanceRowVertical: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  glucoseRangeRow: { flexDirection: 'row', alignItems: 'center' },
+  glucoseRangeInput: { borderWidth: 1, borderColor: c.inputBorder, borderRadius: 8, padding: 8, fontSize: 15, width: 60, textAlign: 'center', backgroundColor: c.inputBg, color: c.text },
+  glucoseRangeSeparator: { fontSize: 16, color: c.textSecondary, marginHorizontal: 6 },
 });

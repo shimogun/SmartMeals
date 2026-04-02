@@ -20,8 +20,12 @@ import mealStorageService from '../../services/mealStorageService';
 import localMealEngine from '../../services/localMealEngine';
 import favoritesService from '../../services/favoritesService';
 import ingredientSubstitutionService, { SubstituteOption } from '../../services/ingredientSubstitutionService';
+import { calcAutoLimits } from '../../services/nutritionCalcService';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 export default function DashboardScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   // Blood glucose input
@@ -29,11 +33,9 @@ export default function DashboardScreen() {
   const [mealTiming, setMealTiming] = useState<MealTiming>('朝');
   const [latestGlucose, setLatestGlucose] = useState<GlucoseRecord | null>(null);
 
-  // Weight/BP accordion
-  const [showExtraInputs, setShowExtraInputs] = useState(false);
-  const [weightValue, setWeightValue] = useState('');
-  const [systolicValue, setSystolicValue] = useState('');
-  const [diastolicValue, setDiastolicValue] = useState('');
+  // HbA1c input
+  const [hba1cValue, setHba1cValue] = useState('');
+  const [latestHba1cDisplay, setLatestHba1cDisplay] = useState<{ value: number; date: string } | null>(null);
 
   // Today's meals
   const [todayMeals, setTodayMeals] = useState<GeneratedMeal[]>([]);
@@ -125,7 +127,12 @@ export default function DashboardScreen() {
 
       const weeklyData = await AsyncStorage.getItem('weekly_records');
       if (weeklyData) {
-        setWeeklyRecords(JSON.parse(weeklyData));
+        const parsed: WeeklyRecord[] = JSON.parse(weeklyData);
+        setWeeklyRecords(parsed);
+        const withHba1c = parsed.filter(r => r.hba1c != null).sort((a, b) => b.timestamp - a.timestamp);
+        if (withHba1c.length > 0) {
+          setLatestHba1cDisplay({ value: withHba1c[0].hba1c!, date: withHba1c[0].weekStart });
+        }
       }
 
       generateUpdateMessage();
@@ -168,84 +175,77 @@ export default function DashboardScreen() {
     }
   };
 
-  const saveGlucose = async () => {
+  const saveHealthRecord = async () => {
     if (!currentUser) return;
-    const value = parseFloat(glucoseValue);
-    if (isNaN(value) || value < 20 || value > 600) {
-      Alert.alert('入力エラー', '血糖値は20〜600の範囲で入力してください');
+
+    const hasGlucose = glucoseValue.trim() !== '';
+    const hasHba1c = hba1cValue.trim() !== '';
+
+    if (!hasGlucose && !hasHba1c) {
+      Alert.alert('入力エラー', '血糖値またはHbA1cを入力してください');
       return;
     }
 
-    const record: GlucoseRecord = {
-      id: Date.now().toString(),
-      value,
-      timestamp: Date.now(),
-      date: today,
-      mealType: mealTiming,
-      userId: currentUser.id,
-    };
+    // バリデーション
+    if (hasGlucose) {
+      const gv = parseFloat(glucoseValue);
+      if (isNaN(gv) || gv < 20 || gv > 600) {
+        Alert.alert('入力エラー', '血糖値は20〜600の範囲で入力してください');
+        return;
+      }
+    }
+    if (hasHba1c) {
+      const hv = parseFloat(hba1cValue);
+      if (isNaN(hv) || hv < 3 || hv > 20) {
+        Alert.alert('入力エラー', 'HbA1cは3.0〜20.0の範囲で入力してください');
+        return;
+      }
+    }
 
     try {
-      const existing = await AsyncStorage.getItem('glucose_records');
-      const records: GlucoseRecord[] = existing ? JSON.parse(existing) : [];
-      records.push(record);
-      await AsyncStorage.setItem('glucose_records', JSON.stringify(records));
-      setLatestGlucose(record);
-      setGlucoseValue('');
-      Alert.alert('保存完了', `血糖値 ${value} mg/dL を記録しました`);
+      const messages: string[] = [];
+
+      // 血糖値を保存
+      if (hasGlucose) {
+        const gv = parseFloat(glucoseValue);
+        const record: GlucoseRecord = {
+          id: Date.now().toString(),
+          value: gv,
+          timestamp: Date.now(),
+          date: today,
+          mealType: mealTiming,
+          userId: currentUser.id,
+        };
+        const existing = await AsyncStorage.getItem('glucose_records');
+        const records: GlucoseRecord[] = existing ? JSON.parse(existing) : [];
+        records.push(record);
+        await AsyncStorage.setItem('glucose_records', JSON.stringify(records));
+        setLatestGlucose(record);
+        setGlucoseValue('');
+        messages.push(`血糖値 ${gv} mg/dL`);
+      }
+
+      // HbA1cを保存
+      if (hasHba1c) {
+        const hv = parseFloat(hba1cValue);
+        const record: WeeklyRecord = {
+          id: (Date.now() + 1).toString(),
+          weekStart: today,
+          timestamp: Date.now(),
+          userId: currentUser.id,
+          hba1c: hv,
+        };
+        const existing = await AsyncStorage.getItem('weekly_records');
+        const records: WeeklyRecord[] = existing ? JSON.parse(existing) : [];
+        records.push(record);
+        await AsyncStorage.setItem('weekly_records', JSON.stringify(records));
+        setHba1cValue('');
+        setLatestHba1cDisplay({ value: hv, date: today });
+        messages.push(`HbA1c ${hv}%`);
+      }
+
+      Alert.alert('保存完了', `${messages.join(' / ')} を記録しました`);
       generateUpdateMessage();
-    } catch {
-      Alert.alert('エラー', '保存に失敗しました');
-    }
-  };
-
-  const saveWeightAndBP = async () => {
-    if (!currentUser) return;
-    const hasWeight = weightValue.trim() !== '';
-    const hasBP = systolicValue.trim() !== '' && diastolicValue.trim() !== '';
-
-    if (!hasWeight && !hasBP) {
-      Alert.alert('入力エラー', '体重または血圧を入力してください');
-      return;
-    }
-
-    try {
-      const existing = await AsyncStorage.getItem('weekly_records');
-      const records = existing ? JSON.parse(existing) : [];
-
-      const record: any = {
-        id: Date.now().toString(),
-        weekStart: today,
-        timestamp: Date.now(),
-        userId: currentUser.id,
-      };
-
-      if (hasWeight) {
-        const w = parseFloat(weightValue);
-        if (isNaN(w) || w < 20 || w > 300) {
-          Alert.alert('入力エラー', '体重は20〜300kgの範囲で入力してください');
-          return;
-        }
-        record.weight = w;
-      }
-
-      if (hasBP) {
-        const sys = parseInt(systolicValue);
-        const dia = parseInt(diastolicValue);
-        if (isNaN(sys) || isNaN(dia) || sys < 60 || sys > 260 || dia < 30 || dia > 160) {
-          Alert.alert('入力エラー', '正しい血圧値を入力してください');
-          return;
-        }
-        record.bloodPressure = { systolic: sys, diastolic: dia };
-      }
-
-      records.push(record);
-      await AsyncStorage.setItem('weekly_records', JSON.stringify(records));
-      setWeightValue('');
-      setSystolicValue('');
-      setDiastolicValue('');
-      setShowExtraInputs(false);
-      Alert.alert('保存完了', '記録しました');
     } catch {
       Alert.alert('エラー', '保存に失敗しました');
     }
@@ -382,10 +382,29 @@ export default function DashboardScreen() {
       return Math.round(values.reduce((s, v) => s + v, 0) / values.length);
     });
 
-    return {
-      labels,
-      datasets: [{ data, strokeWidth: 2 }],
-    };
+    const datasets: Array<{ data: number[]; strokeWidth?: number; color?: (opacity: number) => string; withDots?: boolean }> = [
+      { data, strokeWidth: 2 },
+    ];
+
+    // 血糖値目標範囲を目標ラインとして追加
+    if (medicalGuidance?.glucoseMin) {
+      datasets.push({
+        data: dates.map(() => medicalGuidance.glucoseMin!),
+        strokeWidth: 1,
+        color: (opacity = 1) => `rgba(76, 175, 80, ${opacity * 0.5})`,
+        withDots: false,
+      });
+    }
+    if (medicalGuidance?.glucoseMax) {
+      datasets.push({
+        data: dates.map(() => medicalGuidance.glucoseMax!),
+        strokeWidth: 1,
+        color: (opacity = 1) => `rgba(244, 67, 54, ${opacity * 0.5})`,
+        withDots: false,
+      });
+    }
+
+    return { labels, datasets };
   };
 
   const getTrendStats = () => {
@@ -477,16 +496,19 @@ export default function DashboardScreen() {
         <Text style={styles.sectionHeaderText}>健康情報</Text>
       </View>
 
-      {/* Blood glucose input */}
+      {/* Health record input */}
       <View style={styles.card}>
-        <Text style={styles.cardTitle}>血糖値</Text>
+        <Text style={styles.cardTitle}>数値を記録</Text>
+
+        {/* 血糖値 */}
+        <Text style={styles.inputLabel}>血糖値</Text>
         <View style={styles.glucoseInputRow}>
           <TextInput
             style={styles.glucoseInput}
             value={glucoseValue}
             onChangeText={setGlucoseValue}
             placeholder="値を入力"
-            placeholderTextColor="#999"
+            placeholderTextColor={colors.placeholder}
             keyboardType="number-pad"
           />
           <Text style={styles.unit}>mg/dL</Text>
@@ -503,9 +525,6 @@ export default function DashboardScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <TouchableOpacity style={styles.saveButton} onPress={saveGlucose}>
-            <Text style={styles.saveButtonText}>保存</Text>
-          </TouchableOpacity>
         </View>
         {latestGlucose && (
           <Text style={styles.latestValue}>
@@ -517,65 +536,36 @@ export default function DashboardScreen() {
           onPress={() => setShowTrendModal(true)}
         >
           <Text style={styles.trendLinkText}>トレンドを見る</Text>
-          <Ionicons name="chevron-forward" size={16} color="#007AFF" />
+          <Ionicons name="chevron-forward" size={16} color={colors.primary} />
+        </TouchableOpacity>
+
+        {/* HbA1c（任意） */}
+        <View style={styles.hba1cSection}>
+          <Text style={styles.inputLabel}>HbA1c（通院時に入力）</Text>
+          <View style={styles.hba1cInputRow}>
+            <TextInput
+              style={styles.hba1cInput}
+              value={hba1cValue}
+              onChangeText={setHba1cValue}
+              placeholder="例: 6.5"
+              placeholderTextColor={colors.placeholder}
+              keyboardType="decimal-pad"
+            />
+            <Text style={styles.unit}>%</Text>
+          </View>
+          {latestHba1cDisplay && (
+            <Text style={styles.latestValue}>
+              直近: {latestHba1cDisplay.value}%（{latestHba1cDisplay.date}）
+            </Text>
+          )}
+        </View>
+
+        {/* 共通保存ボタン */}
+        <TouchableOpacity style={styles.recordSaveButton} onPress={saveHealthRecord}>
+          <Text style={styles.recordSaveButtonText}>保存</Text>
         </TouchableOpacity>
       </View>
 
-      {/* Weight/BP accordion */}
-      <TouchableOpacity
-        style={styles.accordionHeader}
-        onPress={() => setShowExtraInputs(!showExtraInputs)}
-      >
-        <Ionicons
-          name={showExtraInputs ? 'chevron-up' : 'chevron-down'}
-          size={20}
-          color="#666"
-        />
-        <Text style={styles.accordionHeaderText}>体重・血圧も記録する</Text>
-      </TouchableOpacity>
-
-      {showExtraInputs && (
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>体重</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.smallInput}
-              value={weightValue}
-              onChangeText={setWeightValue}
-              placeholder="体重"
-              placeholderTextColor="#999"
-              keyboardType="decimal-pad"
-            />
-            <Text style={styles.unit}>kg</Text>
-          </View>
-
-          <Text style={[styles.cardTitle, { marginTop: 12 }]}>血圧</Text>
-          <View style={styles.inputRow}>
-            <TextInput
-              style={styles.smallInput}
-              value={systolicValue}
-              onChangeText={setSystolicValue}
-              placeholder="上"
-              placeholderTextColor="#999"
-              keyboardType="number-pad"
-            />
-            <Text style={styles.unit}>/</Text>
-            <TextInput
-              style={styles.smallInput}
-              value={diastolicValue}
-              onChangeText={setDiastolicValue}
-              placeholder="下"
-              placeholderTextColor="#999"
-              keyboardType="number-pad"
-            />
-            <Text style={styles.unit}>mmHg</Text>
-          </View>
-
-          <TouchableOpacity style={styles.saveButton} onPress={saveWeightAndBP}>
-            <Text style={styles.saveButtonText}>保存</Text>
-          </TouchableOpacity>
-        </View>
-      )}
 
       {/* ===== Meal Section ===== */}
       <View style={[styles.sectionHeader, { marginTop: 24 }]}>
@@ -620,7 +610,16 @@ export default function DashboardScreen() {
 
       {/* Nutrition summary */}
       <View style={styles.card}>
-        <DailyNutritionSummary date={today} medicalGuidance={medicalGuidance} />
+        <DailyNutritionSummary date={today} autoLimits={currentUser ? calcAutoLimits(
+          {
+            height: currentUser.healthData?.height,
+            weight: currentUser.healthData?.weight,
+            age: currentUser.age || 50,
+            gender: currentUser.healthData?.gender || 'male',
+            activityLevel: currentUser.healthData?.activityLevel || 'moderate',
+          },
+          medicalGuidance?.targetHba1c,
+        ) : undefined} />
       </View>
 
       {/* Update tomorrow's meals */}
@@ -647,7 +646,7 @@ export default function DashboardScreen() {
               style={styles.modalClose}
               onPress={() => setShowMealModal(false)}
             >
-              <Ionicons name="close" size={24} color="#333" />
+              <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             {selectedMealDetail && (
               <ScrollView>
@@ -667,7 +666,7 @@ export default function DashboardScreen() {
                     <Text style={styles.ingredientText}>・{ing}</Text>
                     {ingredientSubstitutionService.findSubstitutes(ing) && (
                       <TouchableOpacity style={styles.substButton} onPress={() => openSubstitution(ing)}>
-                        <Ionicons name="swap-horizontal" size={16} color="#007AFF" />
+                        <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -690,7 +689,7 @@ export default function DashboardScreen() {
             <View style={styles.trendHeader}>
               <Text style={styles.trendTitle}>「{substOriginalName}」の代替候補</Text>
               <TouchableOpacity onPress={() => setShowSubstModal(false)}>
-                <Ionicons name="close" size={24} color="#333" />
+                <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
             <ScrollView>
@@ -722,7 +721,7 @@ export default function DashboardScreen() {
             <View style={styles.trendHeader}>
               <Text style={styles.trendTitle}>血糖値トレンド</Text>
               <TouchableOpacity onPress={() => setShowTrendModal(false)}>
-                <Ionicons name="close" size={24} color="#333" />
+                <Ionicons name="close" size={24} color={colors.text} />
               </TouchableOpacity>
             </View>
 
@@ -754,13 +753,13 @@ export default function DashboardScreen() {
                   width={screenWidth - 60}
                   height={220}
                   chartConfig={{
-                    backgroundColor: '#fff',
-                    backgroundGradientFrom: '#fff',
-                    backgroundGradientTo: '#fff',
+                    backgroundColor: colors.chartBg,
+                    backgroundGradientFrom: colors.chartBg,
+                    backgroundGradientTo: colors.chartBg,
                     decimalPlaces: 0,
-                    color: (opacity = 1) => `rgba(33, 150, 243, ${opacity})`,
-                    labelColor: (opacity = 1) => `rgba(102, 102, 102, ${opacity})`,
-                    propsForDots: { r: '3', strokeWidth: '1', stroke: '#2196F3' },
+                    color: (opacity = 1) => colors.chartLine.replace('1)', `${opacity})`),
+                    labelColor: (opacity = 1) => colors.chartLabel.replace('1)', `${opacity})`),
+                    propsForDots: { r: '3', strokeWidth: '1', stroke: colors.chartDot },
                   }}
                   bezier
                   style={{ borderRadius: 8, marginVertical: 8 }}
@@ -772,10 +771,16 @@ export default function DashboardScreen() {
               {medicalGuidance && (medicalGuidance.glucoseMin || medicalGuidance.glucoseMax) && (
                 <View style={styles.trendTargetRow}>
                   {medicalGuidance.glucoseMin && (
-                    <Text style={styles.trendTargetText}>下限目標: {medicalGuidance.glucoseMin} mg/dL</Text>
+                    <View style={styles.trendTargetItem}>
+                      <View style={[styles.trendTargetDot, { backgroundColor: '#4CAF50' }]} />
+                      <Text style={styles.trendTargetText}>下限: {medicalGuidance.glucoseMin} mg/dL</Text>
+                    </View>
                   )}
                   {medicalGuidance.glucoseMax && (
-                    <Text style={[styles.trendTargetText, { color: '#F44336' }]}>上限目標: {medicalGuidance.glucoseMax} mg/dL</Text>
+                    <View style={styles.trendTargetItem}>
+                      <View style={[styles.trendTargetDot, { backgroundColor: '#F44336' }]} />
+                      <Text style={[styles.trendTargetText, { color: '#F44336' }]}>上限: {medicalGuidance.glucoseMax} mg/dL</Text>
+                    </View>
                   )}
                 </View>
               )}
@@ -862,10 +867,10 @@ export default function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: c.background,
   },
   greetingSection: {
     padding: 20,
@@ -874,11 +879,11 @@ const styles = StyleSheet.create({
   greetingText: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: c.text,
   },
   dateText: {
     fontSize: 16,
-    color: '#666',
+    color: c.textSecondary,
     marginTop: 4,
   },
   sectionHeader: {
@@ -891,16 +896,16 @@ const styles = StyleSheet.create({
   sectionHeaderText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: c.textSecondary,
     letterSpacing: 1,
   },
   card: {
-    backgroundColor: '#fff',
+    backgroundColor: c.card,
     marginHorizontal: 16,
     marginVertical: 6,
     borderRadius: 12,
     padding: 16,
-    shadowColor: '#000',
+    shadowColor: c.cardShadow,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.08,
     shadowRadius: 4,
@@ -909,7 +914,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
     marginBottom: 12,
   },
   glucoseInputRow: {
@@ -921,18 +926,18 @@ const styles = StyleSheet.create({
   glucoseInput: {
     flex: 1,
     minWidth: 80,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: c.inputBg,
     borderRadius: 8,
     padding: 10,
     fontSize: 18,
     fontWeight: '600',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    color: '#333',
+    borderColor: c.inputBorder,
+    color: c.text,
   },
   unit: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
   },
   mealTimingRow: {
     flexDirection: 'row',
@@ -942,21 +947,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.sectionBg,
   },
   timingButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
   },
   timingText: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
   },
   timingTextActive: {
     color: '#fff',
     fontWeight: '600',
   },
   saveButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
@@ -970,7 +975,7 @@ const styles = StyleSheet.create({
   },
   latestValue: {
     fontSize: 13,
-    color: '#888',
+    color: c.textMuted,
     marginTop: 8,
   },
   accordionHeader: {
@@ -982,7 +987,7 @@ const styles = StyleSheet.create({
   },
   accordionHeaderText: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
   },
   inputRow: {
     flexDirection: 'row',
@@ -991,13 +996,13 @@ const styles = StyleSheet.create({
   },
   smallInput: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: c.inputBg,
     borderRadius: 8,
     padding: 10,
     fontSize: 16,
     borderWidth: 1,
-    borderColor: '#e0e0e0',
-    color: '#333',
+    borderColor: c.inputBorder,
+    color: c.text,
   },
   mealCardsRow: {
     flexDirection: 'row',
@@ -1005,7 +1010,7 @@ const styles = StyleSheet.create({
   },
   mealCard: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: c.sectionBg,
     borderRadius: 10,
     padding: 12,
     alignItems: 'center',
@@ -1013,19 +1018,19 @@ const styles = StyleSheet.create({
   },
   mealCardTiming: {
     fontSize: 12,
-    color: '#999',
+    color: c.textMuted,
     marginBottom: 4,
   },
   mealCardName: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
     textAlign: 'center',
     marginBottom: 4,
   },
   mealCardCalories: {
     fontSize: 12,
-    color: '#666',
+    color: c.textSecondary,
   },
   favoriteButton: {
     position: 'absolute',
@@ -1035,17 +1040,17 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 14,
-    color: '#999',
+    color: c.textMuted,
     textAlign: 'center',
     paddingVertical: 20,
   },
   updateMessage: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
     marginBottom: 12,
   },
   updateButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: c.accent,
     borderRadius: 10,
     padding: 14,
     flexDirection: 'row',
@@ -1067,7 +1072,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1080,18 +1085,18 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: c.text,
     marginBottom: 8,
   },
   modalDescription: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
     marginBottom: 16,
   },
   nutritionRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: '#f5f5f5',
+    backgroundColor: c.sectionBg,
     borderRadius: 8,
     padding: 12,
     marginBottom: 16,
@@ -1099,23 +1104,23 @@ const styles = StyleSheet.create({
   nutritionItem: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
   },
   modalSectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
     marginTop: 12,
     marginBottom: 8,
   },
   ingredientText: {
     fontSize: 14,
-    color: '#555',
+    color: c.textSecondary,
     marginBottom: 2,
   },
   recipeStep: {
     fontSize: 14,
-    color: '#555',
+    color: c.textSecondary,
     marginBottom: 6,
     lineHeight: 20,
   },
@@ -1127,7 +1132,48 @@ const styles = StyleSheet.create({
   },
   trendLinkText: {
     fontSize: 14,
-    color: '#007AFF',
+    color: c.primary,
+  },
+  inputLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.textSecondary,
+    marginBottom: 6,
+    marginTop: 4,
+  },
+  hba1cSection: {
+    borderTopWidth: 1,
+    borderTopColor: c.borderLight,
+    marginTop: 14,
+    paddingTop: 12,
+  },
+  hba1cInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  hba1cInput: {
+    borderWidth: 1,
+    borderColor: c.inputBorder,
+    borderRadius: 10,
+    padding: 10,
+    fontSize: 18,
+    width: 80,
+    textAlign: 'center',
+    backgroundColor: c.inputBg,
+    color: c.text,
+  },
+  recordSaveButton: {
+    backgroundColor: c.primary,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  recordSaveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   trendHeader: {
     flexDirection: 'row',
@@ -1138,7 +1184,7 @@ const styles = StyleSheet.create({
   trendTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: c.text,
   },
   trendPeriodRow: {
     flexDirection: 'row',
@@ -1149,15 +1195,15 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.sectionBg,
     alignItems: 'center',
   },
   trendPeriodButtonActive: {
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
   },
   trendPeriodText: {
     fontSize: 13,
-    color: '#666',
+    color: c.textSecondary,
   },
   trendPeriodTextActive: {
     color: '#fff',
@@ -1173,21 +1219,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.sectionBg,
   },
   trendFilterChipActive: {
-    backgroundColor: '#2196F3',
+    backgroundColor: c.chartDot,
   },
   trendFilterText: {
     fontSize: 14,
-    color: '#666',
+    color: c.textSecondary,
   },
   trendFilterTextActive: {
     color: '#fff',
     fontWeight: '600',
   },
   trendStatsCard: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: c.sectionBg,
     borderRadius: 10,
     padding: 14,
     marginTop: 12,
@@ -1195,7 +1241,7 @@ const styles = StyleSheet.create({
   trendStatsTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
     marginBottom: 10,
   },
   trendStatsRow: {
@@ -1207,13 +1253,13 @@ const styles = StyleSheet.create({
   },
   trendStatLabel: {
     fontSize: 12,
-    color: '#888',
+    color: c.textMuted,
     marginBottom: 4,
   },
   trendStatValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
   },
   hba1cRow: {
     flexDirection: 'row',
@@ -1234,21 +1280,23 @@ const styles = StyleSheet.create({
   },
   hba1cDate: {
     fontSize: 11,
-    color: '#888',
+    color: c.textMuted,
   },
   hba1cArrow: {
     fontSize: 16,
-    color: '#ccc',
+    color: c.border,
     marginHorizontal: 4,
   },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   substButton: { padding: 4 },
-  substCard: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
-  substName: { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 8 },
+  substCard: { backgroundColor: c.sectionBg, borderRadius: 10, padding: 14, marginBottom: 10 },
+  substName: { fontSize: 17, fontWeight: '600', color: c.text, marginBottom: 8 },
   substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
-  substCompareText: { fontSize: 13, color: '#666' },
-  substApplyButton: { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substCompareText: { fontSize: 13, color: c.textSecondary },
+  substApplyButton: { backgroundColor: c.primary, borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
   substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  trendTargetRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8, backgroundColor: '#f9f9f9', borderRadius: 8, marginBottom: 8 },
-  trendTargetText: { fontSize: 13, fontWeight: '500', color: '#4CAF50' },
+  trendTargetRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8, backgroundColor: c.sectionBg, borderRadius: 8, marginBottom: 8 },
+  trendTargetText: { fontSize: 12, fontWeight: '500', color: '#4CAF50' },
+  trendTargetItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  trendTargetDot: { width: 10, height: 3, borderRadius: 1.5 },
 });

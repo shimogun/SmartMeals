@@ -18,8 +18,10 @@ import localMealEngine from '../../services/localMealEngine';
 import mealStorageService from '../../services/mealStorageService';
 import favoritesService, { FavoriteMeal } from '../../services/favoritesService';
 import * as Clipboard from 'expo-clipboard';
+import { calcAutoLimits } from '../../services/nutritionCalcService';
 import shoppingListService, { ShoppingItem, ShoppingList } from '../../services/shoppingListService';
 import ingredientSubstitutionService, { SubstituteOption } from '../../services/ingredientSubstitutionService';
+import { useThemeColors } from '../../hooks/useThemeColors';
 
 // ============================================================
 // Types
@@ -32,6 +34,8 @@ type RestrictionLevel = 'ゆるめ' | 'ふつう' | 'きびしめ';
 // ============================================================
 
 export default function MealPlanScreen() {
+  const colors = useThemeColors();
+  const styles = createStyles(colors);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [savedPlans, setSavedPlans] = useState<SavedMealPlan[]>([]);
   const [favorites, setFavorites] = useState<FavoriteMeal[]>([]);
@@ -142,6 +146,18 @@ export default function MealPlanScreen() {
       }
     } catch {}
 
+    // HbA1c・基本情報から糖質/カロリー上限を自動算出
+    const autoLimits = calcAutoLimits(
+      {
+        height: currentUser.healthData?.height,
+        weight: currentUser.healthData?.weight,
+        age: currentUser.age || 50,
+        gender: currentUser.healthData?.gender || 'male',
+        activityLevel: currentUser.healthData?.activityLevel || 'moderate',
+      },
+      currentUser.medicalGuidance?.targetHba1c ?? hba1c,
+    );
+
     // Diet restriction mapping
     const restrictionMap: Record<RestrictionLevel, string> = {
       'ゆるめ': 'light',
@@ -165,8 +181,8 @@ export default function MealPlanScreen() {
       likedFoods: currentUser.foodPreferences?.liked || [],
       dislikedFoods: currentUser.foodPreferences?.disliked || [],
       preferLowGi,
-      dailyCarbLimit: currentUser.medicalGuidance?.dailyCarbLimit,
-      dailyCalorieLimit: currentUser.medicalGuidance?.dailyCalorieLimit,
+      dailyCarbLimit: autoLimits.dailyCarbLimit,
+      dailyCalorieLimit: autoLimits.dailyCalorieLimit,
     };
   };
 
@@ -841,10 +857,10 @@ export default function MealPlanScreen() {
 const ACCENT = '#4CAF50';
 const ACCENT_DARK = '#388E3C';
 
-const styles = StyleSheet.create({
+const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: c.background,
   },
 
   // Header
@@ -855,14 +871,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 56,
     paddingBottom: 12,
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: c.border,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
-    color: '#222',
+    color: c.text,
   },
   newPlanBtn: {
     flexDirection: 'row',
@@ -895,7 +911,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: c.text,
     marginBottom: 10,
   },
 
@@ -903,26 +919,26 @@ const styles = StyleSheet.create({
   emptyState: {
     alignItems: 'center',
     paddingVertical: 40,
-    backgroundColor: '#fff',
+    backgroundColor: c.card,
     borderRadius: 12,
   },
   emptyStateText: {
     marginTop: 12,
     fontSize: 16,
-    color: '#999',
+    color: c.textMuted,
     fontWeight: '600',
   },
   emptyStateSubText: {
     marginTop: 4,
     fontSize: 13,
-    color: '#bbb',
+    color: c.textMuted,
   },
 
   // Favorites
   favListCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 8,
@@ -938,17 +954,17 @@ const styles = StyleSheet.create({
   favListCardName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#222',
+    color: c.text,
   },
   favListCardCal: {
     fontSize: 12,
-    color: '#888',
+    color: c.textMuted,
     marginTop: 2,
   },
 
   // Plan card
   planCard: {
-    backgroundColor: '#fff',
+    backgroundColor: c.card,
     borderRadius: 12,
     padding: 14,
     marginBottom: 10,
@@ -968,12 +984,12 @@ const styles = StyleSheet.create({
   planCardName: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#222',
+    color: c.text,
     marginBottom: 4,
   },
   planCardMeta: {
     fontSize: 12,
-    color: '#888',
+    color: c.textMuted,
     marginTop: 2,
   },
   planCardActions: {
@@ -992,7 +1008,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   modalSheet: {
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     maxHeight: '70%',
@@ -1007,13 +1023,13 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#eee',
+    borderBottomColor: c.border,
   },
   modalTitle: {
     flex: 1,
     fontSize: 18,
     fontWeight: '700',
-    color: '#222',
+    color: c.text,
   },
   modalCloseBtn: {
     padding: 4,
@@ -1029,14 +1045,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: c.border,
   },
 
   // Generation modal fields
   fieldLabel: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#555',
+    color: c.textSecondary,
     marginBottom: 8,
     marginTop: 16,
   },
@@ -1049,9 +1065,9 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1.5,
-    borderColor: '#ddd',
+    borderColor: c.inputBorder,
     alignItems: 'center',
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
   },
   selectorBtnActive: {
     borderColor: ACCENT,
@@ -1059,7 +1075,7 @@ const styles = StyleSheet.create({
   },
   selectorBtnText: {
     fontSize: 13,
-    color: '#777',
+    color: c.textSecondary,
     fontWeight: '500',
   },
   selectorBtnTextActive: {
@@ -1070,7 +1086,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     marginBottom: 8,
     fontSize: 12,
-    color: '#999',
+    color: c.textMuted,
     textAlign: 'center',
   },
 
@@ -1097,18 +1113,18 @@ const styles = StyleSheet.create({
   dayTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#333',
+    color: c.text,
     marginBottom: 8,
     paddingBottom: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: c.borderLight,
   },
   mealRow: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#f8f8f8',
+    borderBottomColor: c.borderLight,
     gap: 8,
   },
   mealTimingBadge: {
@@ -1130,11 +1146,11 @@ const styles = StyleSheet.create({
   mealRowName: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#222',
+    color: c.text,
   },
   mealRowCal: {
     fontSize: 12,
-    color: '#888',
+    color: c.textMuted,
     marginTop: 2,
   },
   starBtn: {
@@ -1144,13 +1160,13 @@ const styles = StyleSheet.create({
   // Recipe detail
   recipeDescription: {
     fontSize: 14,
-    color: '#555',
+    color: c.textSecondary,
     lineHeight: 20,
     marginBottom: 16,
   },
   nutritionRow: {
     flexDirection: 'row',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: c.sectionBg,
     borderRadius: 10,
     padding: 14,
     marginBottom: 20,
@@ -1163,22 +1179,22 @@ const styles = StyleSheet.create({
   nutritionValue: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#222',
+    color: c.text,
   },
   nutritionLabel: {
     fontSize: 11,
-    color: '#888',
+    color: c.textMuted,
     marginTop: 2,
   },
   nutritionDivider: {
     width: 1,
     height: 32,
-    backgroundColor: '#ddd',
+    backgroundColor: c.border,
   },
   recipeSectionTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#333',
+    color: c.text,
     marginBottom: 10,
     marginTop: 4,
   },
@@ -1193,15 +1209,15 @@ const styles = StyleSheet.create({
   ingredientText: {
     flex: 1,
     fontSize: 14,
-    color: '#444',
+    color: c.text,
     lineHeight: 20,
   },
   substButton: { padding: 4 },
-  substCard: { backgroundColor: '#f9f9f9', borderRadius: 10, padding: 14, marginBottom: 10 },
-  substName: { fontSize: 17, fontWeight: '600', color: '#333', marginBottom: 8 },
+  substCard: { backgroundColor: c.sectionBg, borderRadius: 10, padding: 14, marginBottom: 10 },
+  substName: { fontSize: 17, fontWeight: '600', color: c.text, marginBottom: 8 },
   substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
-  substCompareText: { fontSize: 13, color: '#666' },
-  substApplyButton: { backgroundColor: '#007AFF', borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substCompareText: { fontSize: 13, color: c.textSecondary },
+  substApplyButton: { backgroundColor: c.primary, borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
   substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   stepRow: {
     flexDirection: 'row',
@@ -1227,7 +1243,7 @@ const styles = StyleSheet.create({
   stepText: {
     flex: 1,
     fontSize: 14,
-    color: '#444',
+    color: c.text,
     lineHeight: 20,
   },
   toggleRow: {
@@ -1240,21 +1256,21 @@ const styles = StyleSheet.create({
   toggleLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
+    color: c.text,
   },
   toggleButton: {
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: c.sectionBg,
   },
   toggleButtonActive: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: c.accent,
   },
   toggleButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#666',
+    color: c.textSecondary,
   },
   toggleButtonTextActive: {
     color: '#fff',
@@ -1262,7 +1278,7 @@ const styles = StyleSheet.create({
 
   // Shopping list modal
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: c.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     padding: 20,
@@ -1286,12 +1302,12 @@ const styles = StyleSheet.create({
   shoppingCategory: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#333',
+    color: c.text,
     marginTop: 16,
     marginBottom: 8,
     paddingBottom: 4,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: c.border,
   },
   shoppingItem: {
     flexDirection: 'row',
@@ -1302,19 +1318,19 @@ const styles = StyleSheet.create({
   },
   shoppingItemName: {
     fontSize: 15,
-    color: '#333',
+    color: c.text,
     flex: 1,
   },
   shoppingItemChecked: {
     textDecorationLine: 'line-through',
-    color: '#999',
+    color: c.textMuted,
   },
   shoppingItemAmount: {
     fontSize: 13,
-    color: '#888',
+    color: c.textMuted,
   },
   copyButton: {
-    backgroundColor: '#007AFF',
+    backgroundColor: c.primary,
     borderRadius: 10,
     padding: 14,
     flexDirection: 'row',

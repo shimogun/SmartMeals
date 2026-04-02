@@ -44,7 +44,9 @@ export interface User {
     targetHba1c?: number;
     glucoseMin?: number;
     glucoseMax?: number;
+    /** @deprecated 自動算出に移行。既存データとの互換性のため残す */
     dailyCarbLimit?: number;
+    /** @deprecated 自動算出に移行。既存データとの互換性のため残す */
     dailyCalorieLimit?: number;
   };
 }

@@ -735,7 +735,7 @@ export default function MealPlanScreen() {
                       <Text style={styles.ingredientText}>・{ing}</Text>
                       {ingredientSubstitutionService.findSubstitutes(ing) && (
                         <TouchableOpacity style={styles.substButton} onPress={() => openSubstitution(ing)}>
-                          <Ionicons name="swap-horizontal" size={16} color="#007AFF" />
+                          <Ionicons name="swap-horizontal" size={16} color={colors.primary} />
                         </TouchableOpacity>
                       )}
                     </View>
@@ -854,8 +854,8 @@ export default function MealPlanScreen() {
 // Styles
 // ============================================================
 
-const ACCENT = '#4CAF50';
-const ACCENT_DARK = '#388E3C';
+const ACCENT = '#6BBF8A';
+const ACCENT_DARK = '#4DA870';
 
 const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create({
   container: {
@@ -868,26 +868,31 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingTop: 56,
-    paddingBottom: 12,
+    paddingBottom: 14,
     backgroundColor: c.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
+    borderBottomWidth: 0,
+    shadowColor: c.cardShadow,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 6,
+    elevation: 2,
   },
   headerTitle: {
     fontSize: 22,
     fontWeight: '700',
     color: c.text,
+    letterSpacing: -0.3,
   },
   newPlanBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: ACCENT,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 4,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    borderRadius: 24,
+    gap: 5,
   },
   newPlanBtnText: {
     color: '#fff',
@@ -905,31 +910,33 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
 
   // Section
   section: {
-    marginTop: 16,
+    marginTop: 20,
     paddingHorizontal: 16,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: c.text,
-    marginBottom: 10,
+    fontSize: 13,
+    fontWeight: '600',
+    color: c.textMuted,
+    marginBottom: 12,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
 
   // Empty state
   emptyState: {
     alignItems: 'center',
-    paddingVertical: 40,
+    paddingVertical: 48,
     backgroundColor: c.card,
-    borderRadius: 12,
+    borderRadius: 18,
   },
   emptyStateText: {
-    marginTop: 12,
+    marginTop: 14,
     fontSize: 16,
-    color: c.textMuted,
+    color: c.textSecondary,
     fontWeight: '600',
   },
   emptyStateSubText: {
-    marginTop: 4,
+    marginTop: 6,
     fontSize: 13,
     color: c.textMuted,
   },
@@ -939,13 +946,13 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.card,
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    shadowColor: c.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     elevation: 2,
   },
   favListCardInfo: {
@@ -965,13 +972,13 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   // Plan card
   planCard: {
     backgroundColor: c.card,
-    borderRadius: 12,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
+    shadowColor: c.cardShadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
     elevation: 2,
   },
   planCardHeader: {
@@ -1004,13 +1011,13 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   // Modal overlay
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
+    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-end',
   },
   modalSheet: {
     backgroundColor: c.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     maxHeight: '70%',
   },
   modalSheetTall: {
@@ -1019,11 +1026,11 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: c.border,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 18,
+    borderBottomWidth: 0.5,
+    borderBottomColor: c.borderLight,
   },
   modalTitle: {
     flex: 1,
@@ -1035,17 +1042,17 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     padding: 4,
   },
   modalBody: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: 24,
+    paddingTop: 20,
   },
   modalBodyContent: {
-    paddingBottom: 32,
+    paddingBottom: 36,
   },
   modalFooter: {
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: c.border,
+    paddingHorizontal: 24,
+    paddingVertical: 18,
+    borderTopWidth: 0.5,
+    borderTopColor: c.borderLight,
   },
 
   // Generation modal fields
@@ -1062,8 +1069,8 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   selectorBtn: {
     flex: 1,
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 11,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: c.inputBorder,
     alignItems: 'center',
@@ -1093,8 +1100,8 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   // Generate button
   generateBtn: {
     backgroundColor: ACCENT,
-    borderRadius: 12,
-    paddingVertical: 14,
+    borderRadius: 16,
+    paddingVertical: 15,
     alignItems: 'center',
   },
   generateBtnDisabled: {
@@ -1167,8 +1174,8 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   nutritionRow: {
     flexDirection: 'row',
     backgroundColor: c.sectionBg,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 16,
+    padding: 16,
     marginBottom: 20,
     alignItems: 'center',
   },
@@ -1213,11 +1220,11 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     lineHeight: 20,
   },
   substButton: { padding: 4 },
-  substCard: { backgroundColor: c.sectionBg, borderRadius: 10, padding: 14, marginBottom: 10 },
+  substCard: { backgroundColor: c.sectionBg, borderRadius: 16, padding: 16, marginBottom: 12 },
   substName: { fontSize: 17, fontWeight: '600', color: c.text, marginBottom: 8 },
   substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
   substCompareText: { fontSize: 13, color: c.textSecondary },
-  substApplyButton: { backgroundColor: c.primary, borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substApplyButton: { backgroundColor: c.primary, borderRadius: 14, padding: 12, alignItems: 'center', marginTop: 10 },
   substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
   stepRow: {
     flexDirection: 'row',
@@ -1259,9 +1266,9 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     color: c.text,
   },
   toggleButton: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
+    paddingHorizontal: 22,
+    paddingVertical: 9,
+    borderRadius: 24,
     backgroundColor: c.sectionBg,
   },
   toggleButtonActive: {
@@ -1279,20 +1286,20 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   // Shopping list modal
   modalContent: {
     backgroundColor: c.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
   },
   shoppingButton: {
-    backgroundColor: '#FF9800',
-    borderRadius: 10,
-    padding: 14,
+    backgroundColor: ACCENT,
+    borderRadius: 16,
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 16,
-    marginBottom: 8,
+    marginTop: 18,
+    marginBottom: 10,
   },
   shoppingButtonText: {
     color: '#fff',
@@ -1331,13 +1338,13 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   copyButton: {
     backgroundColor: c.primary,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 16,
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 12,
+    marginTop: 14,
   },
   copyButtonText: {
     color: '#fff',

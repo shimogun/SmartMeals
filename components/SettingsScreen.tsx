@@ -476,7 +476,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
           {/* ユーザー情報 */}
           {user && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>👤 アカウント</Text>
+              <Text style={styles.sectionTitle}>アカウント</Text>
 
               <View style={styles.profileCard}>
                 <TouchableOpacity onPress={pickAvatar} style={styles.avatarContainer}>
@@ -527,7 +527,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           {/* 食材の好み */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🥦 食材の好み</Text>
+            <Text style={styles.sectionTitle}>食材の好み</Text>
 
             {/* 好きな食材 */}
             <View style={styles.settingItem}>
@@ -552,7 +552,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                 style={styles.addFoodButton}
                 onPress={() => setShowFoodModal('liked')}
               >
-                <Ionicons name="add" size={18} color="#007AFF" />
+                <Ionicons name="add" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -579,7 +579,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                 style={styles.addFoodButton}
                 onPress={() => setShowFoodModal('disliked')}
               >
-                <Ionicons name="add" size={18} color="#007AFF" />
+                <Ionicons name="add" size={18} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -624,7 +624,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
                     {showFoodModal === 'liked' ? '好きな食材を選択' : '苦手な食材を選択'}
                   </Text>
                   <TouchableOpacity onPress={() => setShowFoodModal(null)}>
-                    <Ionicons name="close" size={24} color="#007AFF" />
+                    <Ionicons name="close" size={24} color={colors.textMuted} />
                   </TouchableOpacity>
                 </View>
                 <ScrollView showsVerticalScrollIndicator={false}>
@@ -666,7 +666,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           {/* 通知設定 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔔 通知</Text>
+            <Text style={styles.sectionTitle}>通知</Text>
 
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
@@ -747,7 +747,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           {/* 表示設定 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🎨 表示</Text>
+            <Text style={styles.sectionTitle}>表示</Text>
             
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
@@ -767,7 +767,7 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
           {/* データ管理 */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>💾 データ管理</Text>
+            <Text style={styles.sectionTitle}>データ管理</Text>
             
             <View style={styles.settingItem}>
               <View style={styles.settingLeft}>
@@ -784,55 +784,55 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
             </View>
 
             <TouchableOpacity style={styles.actionItem} onPress={handleDataExport}>
-              <Ionicons name="download-outline" size={20} color="#007AFF" />
+              <Ionicons name="download-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>データをエクスポート</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionItem} onPress={handleDataClear}>
-              <Ionicons name="trash-outline" size={20} color="#FF3B30" />
+              <Ionicons name="trash-outline" size={20} color={colors.danger} />
               <Text style={[styles.actionLabel, { color: '#FF3B30' }]}>全データを削除</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
           {/* プライバシー */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>🔒 プライバシー</Text>
+            <Text style={styles.sectionTitle}>プライバシー</Text>
             
             <TouchableOpacity style={styles.actionItem} onPress={() => handleOpenUrl(PRIVACY_POLICY_URL, 'プライバシーポリシー')}>
-              <Ionicons name="document-text-outline" size={20} color="#007AFF" />
+              <Ionicons name="document-text-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>プライバシーポリシー</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionItem} onPress={() => handleOpenUrl(TERMS_URL, '利用規約')}>
-              <Ionicons name="document-outline" size={20} color="#007AFF" />
+              <Ionicons name="document-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>利用規約</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 
           {/* サポート */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>❓ サポート</Text>
+            <Text style={styles.sectionTitle}>サポート</Text>
             
             <TouchableOpacity style={styles.actionItem} onPress={handleFeedback}>
-              <Ionicons name="chatbubble-outline" size={20} color="#007AFF" />
+              <Ionicons name="chatbubble-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>フィードバック送信</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionItem} onPress={() => setShowFaqModal(true)}>
-              <Ionicons name="help-circle-outline" size={20} color="#007AFF" />
+              <Ionicons name="help-circle-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>ヘルプ・FAQ</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.actionItem} onPress={() => setShowAboutModal(true)}>
-              <Ionicons name="information-circle-outline" size={20} color="#007AFF" />
+              <Ionicons name="information-circle-outline" size={20} color={colors.textMuted} />
               <Text style={styles.actionLabel}>SmartMeals について</Text>
-              <Ionicons name="chevron-forward" size={16} color="#C7C7CC" />
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           </View>
 

@@ -1,93 +1,93 @@
 export const Colors = {
   light: {
     // 基本
-    text: '#333',
-    textSecondary: '#666',
-    textMuted: '#999',
-    background: '#f5f5f5',
-    surface: '#fff',
-    border: '#e0e0e0',
-    borderLight: '#f0f0f0',
+    text: '#2D3A2E',
+    textSecondary: '#5F6B5E',
+    textMuted: '#9CA898',
+    background: '#F6F9F7',
+    surface: '#FFFFFF',
+    border: '#E2EAE4',
+    borderLight: '#EEF3EF',
 
     // ブランド
-    primary: '#007AFF',
-    primaryDark: '#0056CC',
-    accent: '#4CAF50',
+    primary: '#6BBF8A',
+    primaryDark: '#4DA870',
+    accent: '#6BBF8A',
 
     // カード
-    card: '#fff',
-    cardShadow: '#000',
+    card: '#FFFFFF',
+    cardShadow: '#3A5A40',
 
     // 入力
-    inputBg: '#fafafa',
-    inputBorder: '#ddd',
-    placeholder: '#999',
+    inputBg: '#F0F5F1',
+    inputBorder: '#D5DFD7',
+    placeholder: '#9CA898',
 
     // タブ
-    tabIconDefault: '#ccc',
-    tabIconSelected: '#007AFF',
-    tabBg: '#fff',
+    tabIconDefault: '#B8C4B8',
+    tabIconSelected: '#6BBF8A',
+    tabBg: '#FFFFFF',
 
     // セクション
-    sectionBg: '#f0f0f0',
+    sectionBg: '#EEF4EF',
 
     // ステータス
-    success: '#4CAF50',
-    successBg: '#E8F5E9',
-    warning: '#FF9800',
-    danger: '#F44336',
-    dangerBg: '#FFEBEE',
+    success: '#6BBF8A',
+    successBg: '#E8F5EE',
+    warning: '#F0B060',
+    danger: '#E07070',
+    dangerBg: '#FDEEEE',
 
     // チャート
-    chartLine: 'rgba(33, 150, 243, 1)',
-    chartDot: '#2196F3',
-    chartLabel: 'rgba(102, 102, 102, 1)',
-    chartBg: '#fff',
+    chartLine: 'rgba(107, 191, 138, 1)',
+    chartDot: '#6BBF8A',
+    chartLabel: 'rgba(95, 107, 94, 1)',
+    chartBg: '#FFFFFF',
   },
   dark: {
     // 基本
-    text: '#E0E0E0',
-    textSecondary: '#AAAAAA',
-    textMuted: '#777',
-    background: '#121212',
-    surface: '#1E1E1E',
-    border: '#333',
-    borderLight: '#2A2A2A',
+    text: '#DEE8DF',
+    textSecondary: '#A3B2A4',
+    textMuted: '#6E7E6F',
+    background: '#0F1610',
+    surface: '#1A231B',
+    border: '#2A382B',
+    borderLight: '#222E23',
 
     // ブランド
-    primary: '#4A9EFF',
-    primaryDark: '#3A8EEF',
-    accent: '#66BB6A',
+    primary: '#7DCCA0',
+    primaryDark: '#5FB882',
+    accent: '#7DCCA0',
 
     // カード
-    card: '#1E1E1E',
+    card: '#1A231B',
     cardShadow: '#000',
 
     // 入力
-    inputBg: '#2A2A2A',
-    inputBorder: '#444',
-    placeholder: '#666',
+    inputBg: '#222E23',
+    inputBorder: '#344536',
+    placeholder: '#6E7E6F',
 
     // タブ
-    tabIconDefault: '#666',
-    tabIconSelected: '#4A9EFF',
-    tabBg: '#1E1E1E',
+    tabIconDefault: '#4E5E4F',
+    tabIconSelected: '#7DCCA0',
+    tabBg: '#1A231B',
 
     // セクション
-    sectionBg: '#2A2A2A',
+    sectionBg: '#222E23',
 
     // ステータス
-    success: '#66BB6A',
-    successBg: '#1B3A1B',
-    warning: '#FFB74D',
-    danger: '#EF5350',
-    dangerBg: '#3E1A1A',
+    success: '#7DCCA0',
+    successBg: '#1A2E1E',
+    warning: '#F0C070',
+    danger: '#E88080',
+    dangerBg: '#2E1A1A',
 
     // チャート
-    chartLine: 'rgba(74, 158, 255, 1)',
-    chartDot: '#4A9EFF',
-    chartLabel: 'rgba(170, 170, 170, 1)',
-    chartBg: '#1E1E1E',
+    chartLine: 'rgba(125, 204, 160, 1)',
+    chartDot: '#7DCCA0',
+    chartLabel: 'rgba(163, 178, 164, 1)',
+    chartBg: '#1A231B',
   },
 };
 

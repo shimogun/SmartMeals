@@ -44,7 +44,8 @@ export default {
       crossorigin: 'use-credentials'
     },
     plugins: [
-      'expo-router'
+      'expo-router',
+      'expo-font'
     ],
     experiments: {
       typedRoutes: true

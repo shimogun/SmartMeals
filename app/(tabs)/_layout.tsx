@@ -14,17 +14,16 @@ function TabBarIcon(props: {
   name: React.ComponentProps<typeof FontAwesome>['name'];
   color: string;
 }) {
-  return <FontAwesome size={28} style={{ marginBottom: -3 }} {...props} />;
+  return <FontAwesome size={22} style={{ marginBottom: -2 }} {...props} />;
 }
 
-// 設定ボタンコンポーネント
 function SettingsButton({ onPress, color }: { onPress: () => void; color: string }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={{ paddingRight: 15 }}
+      style={{ paddingRight: 16 }}
     >
-      <Ionicons name="settings-outline" size={22} color={color} />
+      <Ionicons name="settings-outline" size={21} color={color} />
     </TouchableOpacity>
   );
 }
@@ -71,18 +70,43 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.tabIconDefault,
-        tabBarStyle: { backgroundColor: colors.tabBg, borderTopColor: colors.border },
-        headerStyle: { backgroundColor: colors.primary },
-        headerTintColor: '#fff',
+        tabBarStyle: {
+          backgroundColor: colors.tabBg,
+          borderTopColor: colors.borderLight,
+          borderTopWidth: 0.5,
+          height: 56,
+          paddingBottom: 6,
+          paddingTop: 4,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontWeight: '600',
+          letterSpacing: 0.2,
+        },
+        headerStyle: {
+          backgroundColor: colors.surface,
+          shadowColor: colors.cardShadow,
+          shadowOffset: { width: 0, height: 1 },
+          shadowOpacity: 0.04,
+          shadowRadius: 4,
+          elevation: 2,
+        },
+        headerTintColor: colors.text,
+        headerTitleStyle: {
+          fontFamily: 'Nunito_900Black',
+          fontSize: 28,
+          color: colors.primary,
+          letterSpacing: 0.5,
+        },
         headerShown: useClientOnlyValue(false, true),
       }}>
       <Tabs.Screen
         name="index"
         options={{
-          title: '今日',
+          title: 'ホーム',
           tabBarIcon: ({ color }) => <TabBarIcon name="home" color={color} />,
-          headerRight: () => <SettingsButton onPress={handleSettingsPress} color="#fff" />,
-          headerTitle: '今日',
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} color={colors.primary} />,
+          headerTitle: 'SmartMeals',
         }}
       />
       <Tabs.Screen
@@ -90,7 +114,8 @@ export default function TabLayout() {
         options={{
           title: '献立',
           tabBarIcon: ({ color }) => <TabBarIcon name="cutlery" color={color} />,
-          headerRight: () => <SettingsButton onPress={handleSettingsPress} color="#fff" />,
+          headerRight: () => <SettingsButton onPress={handleSettingsPress} color={colors.primary} />,
+          headerTitle: 'SmartMeals',
         }}
       />
       <Tabs.Screen

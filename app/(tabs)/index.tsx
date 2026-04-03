@@ -10,6 +10,7 @@ import {
   Modal,
   RefreshControl,
   Dimensions,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -70,6 +71,9 @@ export default function DashboardScreen() {
   const [substOptions, setSubstOptions] = useState<SubstituteOption[]>([]);
   const [substOriginalNutrition, setSubstOriginalNutrition] = useState<any>(null);
 
+  // Avatar
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+
   // Medical guidance
   const [medicalGuidance, setMedicalGuidance] = useState<User['medicalGuidance']>(undefined);
 
@@ -104,6 +108,7 @@ export default function DashboardScreen() {
         }
         setCurrentUser(user);
         setMedicalGuidance(user.medicalGuidance);
+        setAvatarUri((user as any).avatarUri || null);
         if (user.healthData?.weight) setLatestWeightDisplay(user.healthData.weight);
 
         const favIds = await favoritesService.getFavoriteIds(user.id);
@@ -526,13 +531,24 @@ export default function DashboardScreen() {
     >
       {/* Greeting */}
       <View style={styles.greetingSection}>
-        <Text style={styles.greetingText}>{getGreeting()}</Text>
-        <Text style={styles.dateText}>{formatDate()} {currentUser?.name}さん</Text>
+        <View style={styles.greetingAvatar}>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.greetingAvatarImage} />
+          ) : (
+            <View style={styles.greetingAvatarPlaceholder}>
+              <Ionicons name="person" size={22} color={colors.textMuted} />
+            </View>
+          )}
+        </View>
+        <View style={styles.greetingTextContainer}>
+          <Text style={styles.dateText}>{formatDate()}</Text>
+          <Text style={styles.greetingText}>{currentUser?.name}さん、{getGreeting()}</Text>
+        </View>
       </View>
 
       {/* ===== Health Info Section ===== */}
       <View style={styles.sectionHeader}>
-        <Ionicons name="heart" size={18} color="#E91E63" />
+        <Ionicons name="heart" size={18} color={colors.primary} />
         <Text style={styles.sectionHeaderText}>健康情報</Text>
       </View>
 
@@ -630,7 +646,7 @@ export default function DashboardScreen() {
 
       {/* ===== Meal Section ===== */}
       <View style={[styles.sectionHeader, { marginTop: 24 }]}>
-        <Ionicons name="restaurant" size={18} color="#FF9800" />
+        <Ionicons name="restaurant" size={18} color={colors.primary} />
         <Text style={styles.sectionHeaderText}>献立</Text>
       </View>
 
@@ -919,62 +935,85 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     backgroundColor: c.background,
   },
   greetingSection: {
-    padding: 20,
-    paddingBottom: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 24,
+    paddingBottom: 16,
+    gap: 14,
+  },
+  greetingAvatar: {},
+  greetingAvatarImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+  },
+  greetingAvatarPlaceholder: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: c.sectionBg,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  greetingTextContainer: {
+    flex: 1,
   },
   greetingText: {
-    fontSize: 22,
-    fontWeight: 'bold',
+    fontSize: 17,
+    fontWeight: '700',
     color: c.text,
+    marginTop: 2,
   },
   dateText: {
-    fontSize: 16,
-    color: c.textSecondary,
-    marginTop: 4,
+    fontSize: 13,
+    color: c.textMuted,
   },
   sectionHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 8,
+    paddingTop: 20,
+    paddingBottom: 8,
     gap: 6,
   },
   sectionHeaderText: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '600',
-    color: c.textSecondary,
-    letterSpacing: 1,
+    color: c.textMuted,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   card: {
     backgroundColor: c.card,
     marginHorizontal: 16,
-    marginVertical: 6,
-    borderRadius: 12,
-    padding: 16,
+    marginVertical: 8,
+    borderRadius: 18,
+    padding: 20,
     shadowColor: c.cardShadow,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 12,
     elevation: 2,
   },
   cardTitle: {
     fontSize: 16,
     fontWeight: '600',
     color: c.text,
-    marginBottom: 12,
+    marginBottom: 16,
   },
   glucoseInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 10,
   },
   glucoseInput: {
     flex: 1,
     minWidth: 80,
     backgroundColor: c.inputBg,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     fontSize: 18,
     fontWeight: '600',
     borderWidth: 1,
@@ -983,23 +1022,23 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   unit: {
     fontSize: 14,
-    color: c.textSecondary,
+    color: c.textMuted,
   },
   mealTimingRow: {
     flexDirection: 'row',
-    gap: 4,
+    gap: 6,
   },
   timingButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: c.sectionBg,
   },
   timingButtonActive: {
     backgroundColor: c.primary,
   },
   timingText: {
-    fontSize: 14,
+    fontSize: 13,
     color: c.textSecondary,
   },
   timingTextActive: {
@@ -1008,11 +1047,11 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   saveButton: {
     backgroundColor: c.primary,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingHorizontal: 18,
+    paddingVertical: 11,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 10,
   },
   saveButtonText: {
     color: '#fff',
@@ -1022,7 +1061,7 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   latestValue: {
     fontSize: 13,
     color: c.textMuted,
-    marginTop: 8,
+    marginTop: 10,
   },
   accordionHeader: {
     flexDirection: 'row',
@@ -1038,13 +1077,13 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   inputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   smallInput: {
     flex: 1,
     backgroundColor: c.inputBg,
-    borderRadius: 8,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     fontSize: 16,
     borderWidth: 1,
     borderColor: c.inputBorder,
@@ -1052,27 +1091,30 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   mealCardsRow: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 10,
   },
   mealCard: {
     flex: 1,
     backgroundColor: c.sectionBg,
-    borderRadius: 10,
-    padding: 12,
+    borderRadius: 16,
+    padding: 14,
     alignItems: 'center',
     position: 'relative',
   },
   mealCardTiming: {
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: '600',
     color: c.textMuted,
-    marginBottom: 4,
+    marginBottom: 6,
+    letterSpacing: 0.5,
   },
   mealCardName: {
     fontSize: 13,
     fontWeight: '600',
     color: c.text,
     textAlign: 'center',
-    marginBottom: 4,
+    marginBottom: 6,
+    lineHeight: 18,
   },
   mealCardCalories: {
     fontSize: 12,
@@ -1080,48 +1122,48 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   favoriteButton: {
     position: 'absolute',
-    top: 4,
-    right: 4,
+    top: 6,
+    right: 6,
     padding: 4,
   },
   emptyText: {
     fontSize: 14,
     color: c.textMuted,
     textAlign: 'center',
-    paddingVertical: 20,
+    paddingVertical: 28,
   },
   updateMessage: {
     fontSize: 14,
     color: c.textSecondary,
-    marginBottom: 12,
+    marginBottom: 14,
   },
   updateButton: {
     backgroundColor: c.accent,
-    borderRadius: 10,
-    padding: 14,
+    borderRadius: 16,
+    padding: 15,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
   updateButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
   },
   updateButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.35)',
     justifyContent: 'flex-end',
   },
   modalContent: {
     backgroundColor: c.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    padding: 24,
     maxHeight: '80%',
   },
   modalClose: {
@@ -1130,22 +1172,23 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   modalTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: c.text,
-    marginBottom: 8,
+    marginBottom: 10,
   },
   modalDescription: {
     fontSize: 14,
     color: c.textSecondary,
-    marginBottom: 16,
+    marginBottom: 18,
+    lineHeight: 21,
   },
   nutritionRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',
     backgroundColor: c.sectionBg,
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 16,
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 18,
   },
   nutritionItem: {
     fontSize: 13,
@@ -1156,91 +1199,93 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     fontSize: 16,
     fontWeight: '600',
     color: c.text,
-    marginTop: 12,
-    marginBottom: 8,
+    marginTop: 14,
+    marginBottom: 10,
   },
   ingredientText: {
     fontSize: 14,
     color: c.textSecondary,
-    marginBottom: 2,
+    marginBottom: 3,
+    lineHeight: 21,
   },
   recipeStep: {
     fontSize: 14,
     color: c.textSecondary,
-    marginBottom: 6,
-    lineHeight: 20,
+    marginBottom: 8,
+    lineHeight: 22,
   },
   trendLink: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 8,
-    gap: 2,
+    marginTop: 10,
+    gap: 3,
   },
   trendLinkText: {
     fontSize: 14,
     color: c.primary,
+    fontWeight: '500',
   },
   inputLabel: {
     fontSize: 13,
     fontWeight: '600',
     color: c.textSecondary,
-    marginBottom: 6,
+    marginBottom: 8,
     marginTop: 4,
   },
   hba1cSection: {
     borderTopWidth: 1,
     borderTopColor: c.borderLight,
-    marginTop: 14,
-    paddingTop: 12,
+    marginTop: 16,
+    paddingTop: 14,
   },
   hba1cInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 10,
   },
   hba1cInput: {
     borderWidth: 1,
     borderColor: c.inputBorder,
-    borderRadius: 10,
-    padding: 10,
+    borderRadius: 14,
+    padding: 12,
     fontSize: 18,
-    width: 80,
+    width: 84,
     textAlign: 'center',
     backgroundColor: c.inputBg,
     color: c.text,
   },
   recordSaveButton: {
     backgroundColor: c.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 20,
   },
   recordSaveButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
   },
   trendHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 18,
   },
   trendTitle: {
     fontSize: 20,
-    fontWeight: 'bold',
+    fontWeight: '700',
     color: c.text,
   },
   trendPeriodRow: {
     flexDirection: 'row',
-    gap: 6,
-    marginBottom: 12,
+    gap: 8,
+    marginBottom: 14,
   },
   trendPeriodButton: {
     flex: 1,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingVertical: 9,
+    borderRadius: 12,
     backgroundColor: c.sectionBg,
     alignItems: 'center',
   },
@@ -1258,20 +1303,20 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   trendFilterRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
-    marginVertical: 12,
+    gap: 10,
+    marginVertical: 14,
   },
   trendFilterChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 18,
+    paddingVertical: 7,
+    borderRadius: 20,
     backgroundColor: c.sectionBg,
   },
   trendFilterChipActive: {
     backgroundColor: c.chartDot,
   },
   trendFilterText: {
-    fontSize: 14,
+    fontSize: 13,
     color: c.textSecondary,
   },
   trendFilterTextActive: {
@@ -1280,15 +1325,15 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   },
   trendStatsCard: {
     backgroundColor: c.sectionBg,
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 12,
+    borderRadius: 16,
+    padding: 16,
+    marginTop: 14,
   },
   trendStatsTitle: {
     fontSize: 15,
     fontWeight: '600',
     color: c.text,
-    marginBottom: 10,
+    marginBottom: 12,
   },
   trendStatsRow: {
     flexDirection: 'row',
@@ -1312,7 +1357,7 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     alignItems: 'center',
     justifyContent: 'center',
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 6,
   },
   hba1cItem: {
     alignItems: 'center',
@@ -1322,7 +1367,7 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
   hba1cValue: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#2196F3',
+    color: c.primary,
   },
   hba1cDate: {
     fontSize: 11,
@@ -1334,15 +1379,15 @@ const createStyles = (c: ReturnType<typeof useThemeColors>) => StyleSheet.create
     marginHorizontal: 4,
   },
   ingredientRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  substButton: { padding: 4 },
-  substCard: { backgroundColor: c.sectionBg, borderRadius: 10, padding: 14, marginBottom: 10 },
-  substName: { fontSize: 17, fontWeight: '600', color: c.text, marginBottom: 8 },
-  substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 4 },
+  substButton: { padding: 6 },
+  substCard: { backgroundColor: c.sectionBg, borderRadius: 16, padding: 16, marginBottom: 12 },
+  substName: { fontSize: 17, fontWeight: '600', color: c.text, marginBottom: 10 },
+  substCompareRow: { flexDirection: 'row', gap: 16, marginBottom: 6 },
   substCompareText: { fontSize: 13, color: c.textSecondary },
-  substApplyButton: { backgroundColor: c.primary, borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 8 },
+  substApplyButton: { backgroundColor: c.primary, borderRadius: 14, padding: 12, alignItems: 'center', marginTop: 10 },
   substApplyText: { color: '#fff', fontSize: 14, fontWeight: '600' },
-  trendTargetRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 8, backgroundColor: c.sectionBg, borderRadius: 8, marginBottom: 8 },
-  trendTargetText: { fontSize: 12, fontWeight: '500', color: '#4CAF50' },
-  trendTargetItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  trendTargetRow: { flexDirection: 'row', justifyContent: 'space-around', padding: 10, backgroundColor: c.sectionBg, borderRadius: 12, marginBottom: 10 },
+  trendTargetText: { fontSize: 12, fontWeight: '500', color: c.primary },
+  trendTargetItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   trendTargetDot: { width: 10, height: 3, borderRadius: 1.5 },
 });

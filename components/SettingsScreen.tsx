@@ -26,7 +26,7 @@ import notificationService, {
   SlotConfig,
   MAX_SLOTS,
 } from '../services/notificationService';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+// DateTimePicker replaced with custom time picker modal
 import * as ImagePicker from 'expo-image-picker';
 import { ThemeContext } from '../contexts/ThemeContext';
 import { useThemeColors } from '../hooks/useThemeColors';
@@ -93,11 +93,8 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
   const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
   const [showTimePicker, setShowTimePicker] = useState(false);
   const [editingSlotIndex, setEditingSlotIndex] = useState<number | null>(null);
-  const [pickerDate, setPickerDate] = useState<Date>(() => {
-    const d = new Date();
-    d.setHours(20, 0, 0, 0);
-    return d;
-  });
+  const [pickerHour, setPickerHour] = useState(20);
+  const [pickerMinute, setPickerMinute] = useState(0);
 
   useEffect(() => {
     if (visible) {
@@ -189,22 +186,24 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
 
   const openSlotTimePicker = (index: number) => {
     const config = reminderSettings.slots[index];
-    const d = new Date();
-    d.setHours(config.hour, config.minute, 0, 0);
-    setPickerDate(d);
+    setPickerHour(config.hour);
+    setPickerMinute(config.minute);
     setEditingSlotIndex(index);
     setShowTimePicker(true);
   };
 
-  const handleTimeChange = async (event: DateTimePickerEvent, date?: Date) => {
-    setShowTimePicker(false);
-    if (event.type === 'dismissed' || !date || editingSlotIndex === null) return;
-    const hour = date.getHours();
-    const minute = date.getMinutes();
+  const handleTimeConfirm = () => {
+    if (editingSlotIndex === null) return;
     const newSlots = [...reminderSettings.slots];
-    newSlots[editingSlotIndex] = { ...newSlots[editingSlotIndex], hour, minute };
+    newSlots[editingSlotIndex] = { ...newSlots[editingSlotIndex], hour: pickerHour, minute: pickerMinute };
     saveReminderSettings({ ...reminderSettings, slots: newSlots });
     setEditingSlotIndex(null);
+    setShowTimePicker(false);
+  };
+
+  const handleTimeCancel = () => {
+    setEditingSlotIndex(null);
+    setShowTimePicker(false);
   };
 
   const loadUser = async () => {
@@ -734,15 +733,43 @@ export default function SettingsScreen({ visible, onClose }: SettingsScreenProps
               </>
             )}
 
-            {showTimePicker && (
-              <DateTimePicker
-                value={pickerDate}
-                mode="time"
-                is24Hour={true}
-                display="spinner"
-                onChange={handleTimeChange}
-              />
-            )}
+            {/* Custom Time Picker Modal */}
+            <Modal visible={showTimePicker} transparent animationType="fade">
+              <View style={styles.timePickerOverlay}>
+                <View style={styles.timePickerContainer}>
+                  <Text style={styles.timePickerTitle}>時刻を選択</Text>
+                  <View style={styles.timePickerRow}>
+                    <View style={styles.timePickerColumn}>
+                      <TouchableOpacity style={styles.timePickerArrow} onPress={() => setPickerHour((h) => (h + 1) % 24)}>
+                        <Ionicons name="chevron-up" size={24} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <Text style={styles.timePickerValue}>{String(pickerHour).padStart(2, '0')}</Text>
+                      <TouchableOpacity style={styles.timePickerArrow} onPress={() => setPickerHour((h) => (h - 1 + 24) % 24)}>
+                        <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                    <Text style={styles.timePickerColon}>:</Text>
+                    <View style={styles.timePickerColumn}>
+                      <TouchableOpacity style={styles.timePickerArrow} onPress={() => setPickerMinute((m) => (m + 5) % 60)}>
+                        <Ionicons name="chevron-up" size={24} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                      <Text style={styles.timePickerValue}>{String(pickerMinute).padStart(2, '0')}</Text>
+                      <TouchableOpacity style={styles.timePickerArrow} onPress={() => setPickerMinute((m) => (m - 5 + 60) % 60)}>
+                        <Ionicons name="chevron-down" size={24} color={colors.textSecondary} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                  <View style={styles.timePickerButtons}>
+                    <TouchableOpacity style={styles.timePickerCancelBtn} onPress={handleTimeCancel}>
+                      <Text style={styles.timePickerCancelText}>キャンセル</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.timePickerConfirmBtn} onPress={handleTimeConfirm}>
+                      <Text style={styles.timePickerConfirmText}>OK</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </Modal>
           </View>
 
           {/* 表示設定 */}
@@ -1307,19 +1334,19 @@ const createSettingsStyles = (c: ReturnType<typeof useThemeColors>) => StyleShee
     fontWeight: '600',
     color: c.text,
   },
-  guidanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  guidanceRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 6, gap: 8 },
   guidanceLabel: { flex: 1, fontSize: 14, color: c.text },
-  guidanceInput: { width: 80, backgroundColor: c.inputBg, borderRadius: 8, padding: 8, fontSize: 16, textAlign: 'center', borderWidth: 1, borderColor: c.inputBorder, color: c.text },
+  guidanceInput: { width: 84, backgroundColor: c.inputBg, borderRadius: 14, padding: 10, fontSize: 14, textAlign: 'center', borderWidth: 1, borderColor: c.inputBorder, color: c.text },
   guidanceUnit: { fontSize: 13, color: c.textMuted, marginLeft: 4 },
-  guidanceHint: { fontSize: 12, color: c.textMuted, marginBottom: 12, lineHeight: 18, paddingHorizontal: 16 },
-  guidanceRowVertical: { paddingHorizontal: 16, paddingVertical: 8, gap: 8 },
+  guidanceHint: { fontSize: 12, color: c.textMuted, marginBottom: 8, lineHeight: 18, paddingHorizontal: 16 },
+  guidanceRowVertical: { paddingHorizontal: 16, paddingVertical: 6, gap: 8 },
   glucoseRangeRow: { flexDirection: 'row', alignItems: 'center' },
-  glucoseRangeInput: { borderWidth: 1, borderColor: c.inputBorder, borderRadius: 8, padding: 8, fontSize: 15, width: 60, textAlign: 'center', backgroundColor: c.inputBg, color: c.text },
+  glucoseRangeInput: { borderWidth: 1, borderColor: c.inputBorder, borderRadius: 14, padding: 10, fontSize: 14, width: 60, textAlign: 'center', backgroundColor: c.inputBg, color: c.text },
   glucoseRangeSeparator: { fontSize: 16, color: c.textSecondary, marginHorizontal: 6 },
-  reminderSlotLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  reminderTime: { fontSize: 18, color: c.text, fontWeight: '700' },
-  addSlotButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderTopWidth: 0.5, borderTopColor: c.border, borderBottomWidth: 0.5, borderBottomColor: c.border },
-  addSlotText: { fontSize: 15, color: c.primary, fontWeight: '500' },
+  reminderSlotLeft: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  reminderTime: { fontSize: 15, color: c.text, fontWeight: '600' },
+  addSlotButton: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10, backgroundColor: c.surface, borderTopWidth: 0.5, borderTopColor: c.borderLight, borderBottomWidth: 0.5, borderBottomColor: c.borderLight },
+  addSlotText: { fontSize: 14, color: c.primary, fontWeight: '500' },
   // FAQ
   faqQuestion: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 0.5, borderBottomColor: c.border },
   faqQuestionText: { fontSize: 15, fontWeight: '500', color: c.text, flex: 1, marginRight: 8 },
@@ -1349,9 +1376,23 @@ const createSettingsStyles = (c: ReturnType<typeof useThemeColors>) => StyleShee
   editNameSave: { backgroundColor: c.primary, borderRadius: 6, paddingHorizontal: 12, paddingVertical: 6 },
   editNameSaveText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   editNameCancel: { color: c.textMuted, fontSize: 13 },
-  dayRow: { flexDirection: 'row', gap: 6, justifyContent: 'center', flex: 1, paddingVertical: 4 },
-  dayChip: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.sectionBg, alignItems: 'center', justifyContent: 'center' },
+  dayRow: { flexDirection: 'row', gap: 5, justifyContent: 'center', flex: 1, paddingVertical: 4 },
+  dayChip: { width: 34, height: 34, borderRadius: 17, backgroundColor: c.sectionBg, alignItems: 'center', justifyContent: 'center' },
   dayChipActive: { backgroundColor: c.primary },
-  dayChipText: { fontSize: 13, fontWeight: '600', color: c.textSecondary },
+  dayChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
   dayChipTextActive: { color: '#fff' },
+  // Custom time picker
+  timePickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'center', alignItems: 'center' },
+  timePickerContainer: { backgroundColor: c.surface, borderRadius: 20, paddingVertical: 24, paddingHorizontal: 32, alignItems: 'center', width: 260 },
+  timePickerTitle: { fontSize: 15, fontWeight: '600', color: c.textSecondary, marginBottom: 20 },
+  timePickerRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  timePickerColumn: { alignItems: 'center' },
+  timePickerArrow: { padding: 8 },
+  timePickerValue: { fontSize: 32, fontWeight: '700', color: c.text, width: 56, textAlign: 'center' },
+  timePickerColon: { fontSize: 28, fontWeight: '700', color: c.textMuted },
+  timePickerButtons: { flexDirection: 'row', gap: 12, marginTop: 24, width: '100%' },
+  timePickerCancelBtn: { flex: 1, paddingVertical: 11, borderRadius: 14, backgroundColor: c.sectionBg, alignItems: 'center' },
+  timePickerCancelText: { fontSize: 14, fontWeight: '600', color: c.textSecondary },
+  timePickerConfirmBtn: { flex: 1, paddingVertical: 11, borderRadius: 14, backgroundColor: c.primary, alignItems: 'center' },
+  timePickerConfirmText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });
